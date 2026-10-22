@@ -9,6 +9,7 @@ const norm=x=>String(x??'').replace(/\s/g,'').toLowerCase();
 const aliases={'7060--1':'7060-1','，7091-1':'7091-1','dg-106鞋子':'DG-106'};
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 function amount(v){try{const d=new Decimal(String(v));return d.isFinite()&&d.gt(0)&&d.lte(1e9)?d.toFixed():null;}catch{return null;}}
+const needsPrice=row=>!row.formula&&String(row.price??'').trim()==='';
 function text(x){if(x===undefined)return '';if(typeof x!=='object')return String(x);if(x['#text']!==undefined)return String(x['#text']);return list(x.r).map(r=>text(r.t)).join('');}
 async function readBook(file){
  const bytes=await fs.readFile(file);const zip=await JSZip.loadAsync(bytes);const xml=async p=>parser.parse(await zip.file(p).async('string'));
@@ -50,14 +51,18 @@ function choose(item){
  return {price:values[0],reason:'淘宝 SKU 价格全部一致'+(d.skuFix?'；规格未匹配标记不影响取价':'')};
 }
 function match(table,items){return table.rows.map(row=>{
+ const original=row.price??'';
+ if(row.formula)return {...row,original,price:'',status:'公式保留',reason:'价格单元格含公式，跳过查询并保留'};
+ if(!needsPrice(row))return {...row,original,price:'',status:'已有价格',reason:'价格单元格已有内容，跳过查询并保留'};
  const keys=[norm(row.code),norm(aliases[norm(row.code)]||row.code)];const matched=items.filter(x=>keys.includes(norm(x.outerId)));
  let result=matched.length===1?choose(matched[0]):{reason:matched.length?'同货号对应多个商品':'未找到精确货号'};
- let status='待核对';
- if(result.price){if(row.formula)status='公式保留';else if(!row.price.trim())status='待填入';else{try{const old=new Decimal(row.price);status=!old.isFinite()||old.lt(0)?'原内容待核对':old.eq(result.price)?'一致':'待更新';}catch{status='原内容待核对';}}}
- return {...row,...result,original:row.price,price:result.price??'',status};
+ return {...row,...result,original,price:result.price??'',status:result.price?'待填入':'待核对'};
 });}
 async function queryPrices(table,request,progress){
- const codes=[...new Set(table.rows.flatMap(r=>[r.code,r.code.replace(/\s/g,''),aliases[norm(r.code)]]).filter(Boolean))];const items=new Map();
+ const pending=table.rows.filter(needsPrice);
+ progress(`待补价格 ${pending.length} 行，已跳过已有内容或公式 ${table.rows.length-pending.length} 行`);
+ if(!pending.length)return match(table,[]);
+ const codes=[...new Set(pending.flatMap(r=>[r.code,r.code.replace(/\s/g,''),aliases[norm(r.code)]]).filter(Boolean))];const items=new Map();
  for(let off=0;off<codes.length;off+=50){let expected=null,received=[];
   for(let pageNo=1;pageNo<=100;pageNo++){
    const r=await request('/item/base/page.json',{pageNo,pageSize:200,outerIds:codes.slice(off,off+50),outerIdBlur:0,companyNames:[],shopNames:[],api_name:'item_base_page'});
@@ -75,7 +80,9 @@ async function queryPrices(table,request,progress){
 }
 async function writePrices(table,results){
  const bytes=await fs.readFile(table.file);if(hash(bytes)!==table.hash)throw Error('工作簿在查询后已修改，请重新选择并查询');
- const updates=results.filter(r=>['待填入','待更新'].includes(r.status));if(!updates.length)throw Error('没有可写入的价格');
+ const updates=results.filter(r=>r.status==='待填入');if(!updates.length)throw Error('没有可写入的价格');
+ const sourceRows=new Map(table.rows.map(row=>[row.ref,row]));
+ if(updates.some(r=>!sourceRows.has(r.ref)||!needsPrice(sourceRows.get(r.ref))||!amount(r.price)))throw Error('只允许回填原本为空且不含公式的价格单元格');
  const zip=await JSZip.loadAsync(bytes);let xml=await zip.file(table.path).async('string');
  for(const r of updates){const ref=r.ref;const pattern=new RegExp('<c\\b(?=[^>]*\\br="'+ref+'")([^>]*)(?:\\/>|>[\\s\\S]*?<\\/c>)');const found=xml.match(pattern);
   if(found){if(/<f\b/.test(found[0]))throw Error('公式单元格不可覆盖');const attrs=found[1].replace(/\s+t="[^"]*"/g,'');xml=xml.replace(pattern,`<c${attrs}><v>${r.price}</v></c>`);}
@@ -84,7 +91,7 @@ async function writePrices(table,results){
  }
  zip.file(table.path,xml);const backup=table.file+'.'+Date.now()+'.backup.xlsx',tmp=table.file+'.'+Date.now()+'.tmp.xlsx';
  await fs.writeFile(backup,bytes,{flag:'wx'});
- try{await fs.writeFile(tmp,await zip.generateAsync({type:'nodebuffer'}),{flag:'wx'});const reread=await readBook(tmp);for(const r of results){const got=reread.rows.find(x=>x.ref===r.ref);const expected=['待填入','待更新'].includes(r.status)?r.price:r.original;if(!got||got.price!==expected||got.formula!==r.formula)throw Error('写入回读校验失败');}
+ try{await fs.writeFile(tmp,await zip.generateAsync({type:'nodebuffer'}),{flag:'wx'});const reread=await readBook(tmp);for(const r of results){const got=reread.rows.find(x=>x.ref===r.ref);const expected=r.status==='待填入'?r.price:r.original;if(!got||got.price!==expected||got.formula!==r.formula)throw Error('写入回读校验失败');}
  if(hash(await fs.readFile(table.file))!==table.hash)throw Error('保存前发现原文件被修改');await fs.rename(tmp,table.file);return {backup,count:updates.length};}finally{await fs.unlink(tmp).catch(()=>{});}
 }
-module.exports={readBook,queryPrices,writePrices,match,choose,norm,amount};
+module.exports={readBook,queryPrices,writePrices,match,choose,norm,amount,needsPrice};
