@@ -38,7 +38,8 @@ function githubManifest(release) {
   const version=release.tag_name.replace(/^v/,'');versionParts(version);
   const downloads={};
   for(const [target,suffix] of Object.entries({'darwin-arm64':'mac-arm64.dmg','darwin-x64':'mac-x64.dmg','win32-x64':'win-x64.exe','win32-arm64':'win-arm64.exe'})) {
-    const matches=release.assets.filter(a=>a.name===`钊叔工具箱-${version}-${suffix}`);
+    const expectedNames=new Set([`钊叔工具箱-${version}-${suffix}`,`-${version}-${suffix}`]);
+    const matches=release.assets.filter(a=>expectedNames.has(a.name));
     if(matches.length>1)throw new Error('更新安装包重复');
     if(matches.length){const url=new URL(secureURL(matches[0].browser_download_url));if(url.hostname!=='github.com'||!url.pathname.startsWith('/xyq20/ZSZ-Tools/releases/download/'))throw new Error('安装包不属于工具箱发布仓库');downloads[target]=url.href;}
   }
