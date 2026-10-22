@@ -1,0 +1,51 @@
+{
+  "name": "team-toolkit",
+  "version": "0.2.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:win": "electron-builder --win nsis",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "local.team.toolkit",
+    "productName": "钊叔工具箱",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "app/**/*",
+      "updater.cjs",
+      "update-config.json",
+      "business/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "artifactName": "钊叔工具箱-${version}-${os}-${arch}.${ext}"
+  },
+  "dependencies": {
+    "decimal.js": "^10.6.0",
+    "exceljs": "^4.4.0",
+    "fast-xml-parser": "^5.11.2",
+    "jszip": "^3.10.1"
+  }
+}

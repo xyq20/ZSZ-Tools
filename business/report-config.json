@@ -1,0 +1,164 @@
+{
+  "base": {
+    "queryTableRange": "all",
+    "tradeOrderTimeQueryType": "trade_created",
+    "quickTimeSelect": "",
+    "workOrderTimeQueryType": "after_sale_finish",
+    "userIdList": "900011126,900011764,900013968,900053166,900055987,900162296,900172078,900178173,900187260,900213126,900222000,900287885,900298661,900357865",
+    "warehouseIdList": "",
+    "$tradeNumType": "systemTradeSidList",
+    "systemTradeSidList": "",
+    "buyerNick": "",
+    "systemItemIdList": "",
+    "systemSkuIdList": "",
+    "systemOuterIdList": "",
+    "systemItemIdQueryType": "1",
+    "systemOuterIdQueryType": "0",
+    "platformItemIdQueryType": "1",
+    "platformItemIdList": "",
+    "platformSkuIdQueryType": "1",
+    "platformSkuIdList": "",
+    "platformItemTitleList": "",
+    "platformItemTitleQueryType": "0",
+    "platformOuterIdQueryType": "0",
+    "platformOuterIdList": "",
+    "systemItemShortTitleQueryType": "0",
+    "systemItemShortTitleList": "",
+    "snapshotSystemOuterIdQueryType": "0",
+    "snapshotSystemOuterIdList": "",
+    "tradeDataOriginSetting": "{\"tradeNonPaymentCondition\":0,\"tradeScalpingCondition\":0,\"tradeCancelCondition\":2,\"offlineTradeCondition\":0,\"tradeNonConsignCondition\":0,\"tradeOutStockCondition\":0,\"itemNotMatchCondition\":0,\"virtualItemCondition\":0,\"otherErpConsignCondition\":0,\"workOrderOnlineCloseCondition\":0}",
+    "costType": "2",
+    "numericScale": "2",
+    "orderItemAttributeList": "",
+    "itemBrandIdList": "",
+    "skuBrandIdList": "",
+    "itemCategoryIdList": "",
+    "skuCategoryIdList": "",
+    "itemCategoryQuerySetting": "",
+    "itemClassifyIdList": "",
+    "skuClassifyIdList": "",
+    "itemTagQueryType": "0",
+    "itemTagIdList": "",
+    "supplierIdList": "",
+    "supplierCodeList": "",
+    "mainSupplierFilter": "0",
+    "tradeTypeContainList": "",
+    "tradeStatusContainList": "",
+    "tradePlatformStatusContainList": "",
+    "tradeFlagContainList": "",
+    "tradeLabelContainList": "",
+    "tradeLabelExcludeList": "",
+    "tradeLabelUseChildLabelFilter": "0",
+    "tradeLabelContainType": 1,
+    "tradeLabelExcludeType": 1,
+    "distributorIdList": "",
+    "destIdList": "",
+    "saleManIds": "",
+    "authorList": "",
+    "authorQueryType": "0",
+    "customerIdList": "",
+    "suitAnalyzeFlag": "1",
+    "combineAnalyzeFlag": "0",
+    "processAnalyzeFlag": "0",
+    "provinceCityAreaJson": "{}",
+    "streetList": "",
+    "expressTemplateIdList": "",
+    "expressIdList": "",
+    "workOrderStatusList": "9",
+    "workOrderStatusQueryType": 1,
+    "workOrderStatusFilterFlag": 0,
+    "workOrderTypeList": "1,2,4,5,7,8,10",
+    "workOrderTypeQueryType": 1,
+    "workOrderTypeFilterFlag": 0,
+    "pageId": "100767",
+    "api_name": "kmrp_statistics_history_sale_finance_page",
+    "pageNo": 1,
+    "pageSize": 50
+  },
+  "shops": [
+    {
+      "id": 900011126,
+      "title": "中古Remake商店",
+      "shortTitle": "中古Remake商店",
+      "source": "淘宝"
+    },
+    {
+      "id": 900011764,
+      "title": "钊叔 NEIGBORL 制",
+      "shortTitle": "钊叔 NEIGBORL 制",
+      "source": "抖店(放心购)"
+    },
+    {
+      "id": 900013968,
+      "title": "NEIGBORL官方旗舰店",
+      "shortTitle": "NEIGBORL官方旗舰店",
+      "source": "有赞"
+    },
+    {
+      "id": 900053166,
+      "title": "钊叔制",
+      "shortTitle": "钊叔制",
+      "source": "淘宝"
+    },
+    {
+      "id": 900055987,
+      "title": "钊叔的店",
+      "shortTitle": "钊叔的店",
+      "source": "小红书"
+    },
+    {
+      "id": 900162296,
+      "title": "啊亮穿搭",
+      "shortTitle": "啊亮穿搭",
+      "source": "抖店(放心购)"
+    },
+    {
+      "id": 900172078,
+      "title": "钊叔制 NEIGHBORL",
+      "shortTitle": "钊叔制 NEIGHBORL",
+      "source": "抖店(放心购)"
+    },
+    {
+      "id": 900178173,
+      "title": "老朱和NEIGBORL",
+      "shortTitle": "老朱和NEIGBORL",
+      "source": "抖店(放心购)"
+    },
+    {
+      "id": 900187260,
+      "title": "钊叔制NEIGBORL的店",
+      "shortTitle": "钊叔制NEIGBORL的店",
+      "source": "小红书"
+    },
+    {
+      "id": 900213126,
+      "title": "泰美了穿搭",
+      "shortTitle": "泰美了穿搭",
+      "source": "抖店(放心购)"
+    },
+    {
+      "id": 900222000,
+      "title": "NEIGBORL批判家专卖店",
+      "shortTitle": "NEIGBORL批判家专卖店",
+      "source": "天猫"
+    },
+    {
+      "id": 900287885,
+      "title": "鞋子店铺",
+      "shortTitle": "鞋子店铺",
+      "source": "得物"
+    },
+    {
+      "id": 900298661,
+      "title": "服装店铺",
+      "shortTitle": "服装店铺",
+      "source": "得物"
+    },
+    {
+      "id": 900357865,
+      "title": "NEIGBORL鞋服旗舰店",
+      "shortTitle": "NEIGBORL鞋服旗舰店",
+      "source": "拼多多"
+    }
+  ]
+}
