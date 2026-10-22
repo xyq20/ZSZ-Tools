@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -8,6 +8,7 @@
     "pack": "electron-builder --dir",
     "dist:mac": "electron-builder --mac dmg",
     "dist:win": "electron-builder --win nsis",
+    "prepare:runtimes": "node scripts/prepare-runtimes.cjs",
     "test": "node --test test/*.test.cjs"
   },
   "devDependencies": {
@@ -17,36 +18,75 @@
   "build": {
     "appId": "local.team.toolkit",
     "productName": "钊叔工具箱",
-    "electronLanguages": ["zh-CN", "zh_CN"],
+    "electronLanguages": [
+      "zh-CN",
+      "zh_CN"
+    ],
     "files": [
       "main.cjs",
       "preload.cjs",
       "app/**/*",
       "updater.cjs",
       "update-config.json",
-      "business/**/*"
+      "business/**/*",
+      "!business/monthly-python/**/*"
     ],
     "mac": {
       "extendInfo": {
         "CFBundleDevelopmentRegion": "zh_CN",
-        "CFBundleLocalizations": ["zh_CN"]
+        "CFBundleLocalizations": [
+          "zh_CN"
+        ]
       },
       "category": "public.app-category.productivity",
       "target": [
         "dmg"
+      ],
+      "extraResources": [
+        {
+          "from": "runtimes/mac-${arch}",
+          "to": "python",
+          "filter": [
+            "**/*",
+            "!**/__pycache__/**",
+            "!**/*.pyc"
+          ]
+        }
       ]
     },
     "win": {
       "target": [
         "nsis"
+      ],
+      "extraResources": [
+        {
+          "from": "runtimes/win-${arch}",
+          "to": "python",
+          "filter": [
+            "**/*"
+          ]
+        }
       ]
     },
     "nsis": {
-      "installerLanguages": ["zh_CN"],
+      "installerLanguages": [
+        "zh_CN"
+      ],
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
-    "artifactName": "钊叔工具箱-${version}-${os}-${arch}.${ext}"
+    "artifactName": "钊叔工具箱-${version}-${os}-${arch}.${ext}",
+    "extraResources": [
+      {
+        "from": "business/monthly-python",
+        "to": "monthly-python",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "decimal.js": "^10.6.0",
