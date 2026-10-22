@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -17,6 +17,7 @@
   "build": {
     "appId": "local.team.toolkit",
     "productName": "钊叔工具箱",
+    "electronLanguages": ["zh-CN", "zh_CN"],
     "files": [
       "main.cjs",
       "preload.cjs",
@@ -26,6 +27,10 @@
       "business/**/*"
     ],
     "mac": {
+      "extendInfo": {
+        "CFBundleDevelopmentRegion": "zh_CN",
+        "CFBundleLocalizations": ["zh_CN"]
+      },
       "category": "public.app-category.productivity",
       "target": [
         "dmg"
@@ -37,6 +42,7 @@
       ]
     },
     "nsis": {
+      "installerLanguages": ["zh_CN"],
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },

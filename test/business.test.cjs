@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs/promises');const os=require('node:os');const path=require('node:path');const ExcelJS=require('exceljs');const JSZip=require('jszip');
-const {readBook,writePrices,match,choose,queryPrices}=require('../business/prices.cjs');const {months,queryReport,exportReport}=require('../business/reports.cjs');
+const {readBook,writePrices,match,choose,queryPrices}=require('../business/prices.cjs');const {months,queryReport,exportReport,reportTotals}=require('../business/reports.cjs');
 const item=(code,p,id=1)=>({outerId:code,baseItemId:id,detail:{id,baseItemId:id,skuFix:true,skuList:[{skuPrice:p,baseItemId:id}]}});
 test('exact aliases, duplicate codes, formulas and SKU validation',()=>{
  const rows=[{code:'7060--1',price:'',formula:false},{code:'x',price:'10',formula:true},{code:'missing',price:'',formula:false}];
@@ -19,6 +19,11 @@ test('month boundaries use China time and support year rollover',()=>{const m=mo
 test('report validates totals and confirms missing stores before export',async()=>{
  const cfg=require('../business/report-config.json');let zeroChecks=0;const row={user_id:String(cfg.shops[0].id),order_pay_amount:'10.01',snapshot_refund_money:'2.00'};
  const request=async(url,b)=>{if(url.endsWith('sniff'))return {suc:true,data:{}};if(url.endsWith('page'))return {suc:true,data:{list:[row],page:{hasNext:false}}};if(b.userIdList.includes(','))return {suc:true,data:{total:1,amount:{order_pay_amount:'10.01',snapshot_refund_money:'2'}}};zeroChecks++;return {suc:true,data:{total:'0'}};};
- const result=await queryReport('2026-01','2026-01',request,()=>{});assert.equal(zeroChecks,13);assert.equal(result.rows.length,14);assert.equal(result.monthly[0].order_pay_amount,'10.01');const f=path.join(await fs.mkdtemp(path.join(os.tmpdir(),'report-test-')),'报告.xlsx');await exportReport(result,f);assert((await fs.stat(f)).size>1000);
+ const result=await queryReport('2026-01','2026-01',request,()=>{});assert.equal(zeroChecks,13);assert.equal(result.rows.length,14);assert.equal(result.monthly[0].order_pay_amount,'10.01');assert.deepEqual(result.totals,{order_pay_amount:'10.01',snapshot_refund_money:'2.00'});const f=path.join(await fs.mkdtemp(path.join(os.tmpdir(),'report-test-')),'报告.xlsx');await exportReport(result,f);assert((await fs.stat(f)).size>1000);
+ const wb=new ExcelJS.Workbook();await wb.xlsx.readFile(f);assert.equal(wb.worksheets[0].getCell('C6').value.result,10.01);for(const sheet of wb.worksheets){assert.equal(sheet.pageSetup.horizontalCentered,true);sheet.eachRow(row=>row.eachCell(cell=>{assert.equal(cell.alignment.horizontal,'center');assert.equal(cell.alignment.vertical,'middle');}));}
  await assert.rejects(queryReport('2026-01','2026-01',async(url,b)=>{const r=await request(url,b);if(url.endsWith('summary')&&b.userIdList.includes(','))r.data.amount.order_pay_amount='11';return r;},()=>{}),/不一致/);
+});
+test('report totals retain exact cents across months',()=>{
+ assert.deepEqual(reportTotals([{order_pay_amount:'0.10',snapshot_refund_money:'0.01'},{order_pay_amount:'0.20',snapshot_refund_money:'0.02'},{order_pay_amount:'12345678.99',snapshot_refund_money:'5.10'}]),{order_pay_amount:'12345679.29',snapshot_refund_money:'5.13'});
+ assert.throws(()=>reportTotals([{order_pay_amount:null,snapshot_refund_money:'0'}]),/金额缺失/);
 });
