@@ -15,8 +15,8 @@ function setupBusiness(win,app){
  const loginReady=loginState.restore();
  async function request(tool,route,body){
   await loginReady;
-  await new Promise(r=>setTimeout(r,tool==='price'?150:1800));
-  if(tool==='monthly')return requestInErpPage(await loginWindow(tool,false),route,body);
+  await new Promise(r=>setTimeout(r,tool==='price'?150:tool==='monthly'?1800:0));
+  if(tool==='monthly'||tool==='report')return requestInErpPage(await loginWindow(tool,false),route,body);
   const origin=origins[tool];
   const headers={'Content-Type':'application/json','Origin':origin,'Referer':origin+'/'};
   const response=await sessions[tool].fetch(origin+route,{credentials:'include',method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,redirect:'error',signal:AbortSignal.timeout(45000)});

@@ -12,7 +12,7 @@ test('ERP response reports actual server errors instead of inventing permission 
 });
 test('monthly request uses authenticated page fetch on the redirected ERP shard',async()=>{
  let called=false;const payload={result:1,data:{list:[{itemOuterId:'test'}]}};
- const win={isDestroyed:()=>false,webContents:{isLoading:()=>false,getURL:()=> 'https://erpb.superboss.cc/index.html',executeJavaScript:expression=>vm.runInNewContext(expression,{location:{origin:'https://erpb.superboss.cc'},AbortSignal,fetch:async(url,options)=>{called=true;assert.equal(url,'/report/sale/dimensions/list');assert.equal(options.credentials,'include');assert.equal(options.headers.Companyid,'111873');assert.equal(new URLSearchParams(options.body).get('asTypes'),'1,2,7,8,10');return {ok:true,status:200,json:async()=>payload};}})}};
+ const win={isDestroyed:()=>false,webContents:{isLoading:()=>false,getURL:()=> 'https://erpb.superboss.cc/index.html',executeJavaScript:expression=>vm.runInNewContext(expression,{location:{origin:'https://erpb.superboss.cc'},AbortSignal,fetch:async(url,options)=>{called=true;assert.equal(url,'/report/sale/dimensions/list');assert.equal(options.credentials,'include');assert.equal(options.headers.Companyid,'111873');assert.equal(new URLSearchParams(options.body).get('asTypes'),'1,2,7,8,10');return {ok:true,status:200,headers:{get:()=>null},json:async()=>payload};}})}};
  assert.equal(await requestInErpPage(win,'/report/sale/dimensions/list',{asTypes:'1,2,7,8,10'}),payload);assert(called);
  await assert.rejects(requestInErpPage(win,'/other',{}),/不支持/);
 });

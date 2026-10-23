@@ -1,11 +1,13 @@
 const Decimal=require('decimal.js');const ExcelJS=require('exceljs');const config=require('./report-config.json');
 const {centerWorkbook}=require('./workbook-style.cjs');
+const {mapMonths,pacedRequest}=require('./report-speed.js');
 const fields=['order_pay_amount','snapshot_refund_money'];
 const reportTotals=monthly=>Object.fromEntries(fields.map(f=>[f,monthly.reduce((sum,row)=>sum.plus(money(row[f])),new Decimal(0)).toFixed(2)]));
 function money(v){if(v===null||v===undefined||v==='')throw Error('报表金额缺失');const d=new Decimal(String(v).replaceAll(',',''));if(!d.isFinite())throw Error('报表金额无效');return d;}
 function months(start,end){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(start)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(end)||start>end)throw Error('请选择有效的起止月份');const out=[];let [y,m]=start.split('-').map(Number);while(`${y}-${String(m).padStart(2,'0')}`<=end){const label=`${y}-${String(m).padStart(2,'0')}`;const st=Date.UTC(y,m-1,1)-8*3600000,en=Date.UTC(y,m,1)-8*3600000-1000;out.push({label,startTime:st,endTime:Math.min(en,Date.now())});if(out.length>36)throw Error('单次最多查询 36 个月');if(++m===13){y++;m=1;}}if(out.some(x=>x.startTime>Date.now()))throw Error('不能查询未来月份');return out;}
-async function queryReport(start,end,request,progress){
- const monthly=[],rows=[];for(const job of months(start,end)){
+async function queryReport(start,end,request,progress,options={}){
+ request=pacedRequest(request,{...options,onRetry:(ms)=>progress(`快麦请求频繁，等待 ${Math.ceil(ms/1000)} 秒后重试…`)});
+ const parts=await mapMonths(months(start,end),async job=>{const monthly=[],rows=[];
   const body={...config.base,startTime:job.startTime,endTime:job.endTime,pageNo:1};
   const call=async(kind,payload=body)=>{progress(`${job.label} · ${kind==='page'?'查询店铺':kind==='summary'?'核对汇总':'准备查询'}`);const r=await request('/kmrp/statistics/history/sale/finance/'+kind,{...payload,api_name:'kmrp_statistics_history_sale_finance_'+kind});if(r.suc!==true)throw Error('报表接口未返回成功状态');return r.data;};
   await call('sniff');const data=await call('page');const summary=await call('summary');
@@ -17,7 +19,7 @@ async function queryReport(start,end,request,progress){
   for(const shop of config.shops.filter(s=>!byId.has(String(s.id)))){const zero=await call('summary',{...body,userIdList:String(shop.id)});if(Number(zero?.total)!==0)throw Error('缺失店铺存在记录，不能按零汇总');}
   const total={month:job.label};for(const f of fields){const sum=data.list.reduce((n,r)=>n.plus(money(r[f])),new Decimal(0));if(!sum.eq(money(summary.amount?.[f])))throw Error('店铺金额与月度汇总不一致');total[f]=sum.toFixed(2);}
   monthly.push(total);for(const shop of config.shops){const src=byId.get(String(shop.id));rows.push({month:job.label,title:shop.title,platform:shop.source,...Object.fromEntries(fields.map(f=>[f,src?money(src[f]).toFixed(2):'0.00']))});}
- }
+ return {monthly,rows};},options);const monthly=parts.flatMap(x=>x.monthly),rows=parts.flatMap(x=>x.rows);
  return {start,end,monthly,rows,totals:reportTotals(monthly),queriedAt:new Date().toISOString(),shops:config.shops.length};
 }
 async function exportReport(data,file){
