@@ -6,6 +6,8 @@ const {fetchManifest,evaluateManifest}=require('./updater.cjs');
 const updateConfig=require('./update-config.json');
 let win, approvedDownload=null, pendingCheck=null;
 let business,quitting=false;
+const {restoreWindow}=require('./business/windows.cjs');
+app.on('activate',()=>restoreWindow(win));
 // Keep one stable profile directory across development and branded installers.
 app.setPath('userData',path.join(app.getPath('appData'),'team-toolkit'));
 ipcMain.handle('app-version',()=>app.getVersion());

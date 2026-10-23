@@ -15,7 +15,9 @@ let business,win;
 app.whenReady().then(async()=>{
  try{
   const rows=JSON.parse(fs.readFileSync(path.join(directory,'rows.json'))),queries=[];
-  session.fromPartition('persist:toolkit-erp').fetch=async(url,options)=>{const body=new URLSearchParams(options.body);queries.push(body.get('asTypes'));assert.equal(options.headers.Companyid,'111873');return {ok:true,json:async()=>({result:1,data:{list:rows}})};};
+  const originalLoadURL=BrowserWindow.prototype.loadURL;
+  BrowserWindow.prototype.loadURL=function(url,...args){if(/^https:\\/\\/[^/]+\\.superboss\\.cc/.test(url))return Promise.resolve();return originalLoadURL.call(this,url,...args);};
+  require(path.join(project,'business/erp-page.cjs')).requestInErpPage=async(window,route,body)=>{assert.equal(route,'/report/sale/dimensions/list');assert.equal(window.getParentWindow(),null);queries.push(body.asTypes);return {result:1,data:{list:rows}};};
   dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});
   dialog.showMessageBox=async()=>({response:1});
   dialog.showSaveDialog=async()=>({canceled:false,filePath:path.join(directory,'核对.xlsx')});
@@ -28,6 +30,12 @@ app.whenReady().then(async()=>{
   await evaluate(\"document.querySelector('aside [data-view=monthly]').click();document.getElementById('monthly-date').value='2026-10-22';document.getElementById('monthly-choose').click()\");
   await wait(\"document.getElementById('monthly-progress').textContent.includes('总表已读取')\");
   assert.equal(await evaluate(\"document.getElementById('crumb').textContent\"),'总表（双姐）');
+  await evaluate(\"document.querySelector('[data-login=monthly]').click()\");
+  await new Promise(r=>setTimeout(r,300));
+  const login=BrowserWindow.getAllWindows().find(w=>w!==win);assert(login);assert.equal(login.getParentWindow(),null);
+  win.show();login.show();login.minimize();await new Promise(r=>setTimeout(r,700));assert.equal(win.isMinimized(),false);assert.equal(win.isVisible(),true);
+  await evaluate(\"document.querySelector('[data-login=monthly]').click()\");await new Promise(r=>setTimeout(r,500));assert.equal(login.isMinimized(),false);
+  console.log('Native login minimize and restore passed');
   await evaluate(\"document.getElementById('monthly-preview').click()\");
   await wait(\"document.getElementById('monthly-progress').textContent.includes('预览完成')\");
   assert.equal(await evaluate(\"document.getElementById('monthly-save').disabled\"),false);
