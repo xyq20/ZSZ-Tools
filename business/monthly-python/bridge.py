@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sys
+import zipfile
 from datetime import date
 from pathlib import Path
 
@@ -12,6 +13,7 @@ for stream in (sys.stdin, sys.stdout, sys.stderr):
 
 import erp_excel_sync as core
 from monthly_schedule import resolve_sync_cycle
+from xlsx_monthly import discover_layout
 
 
 def digest(path):
@@ -41,6 +43,10 @@ def inspect_job(job):
     if not source.is_file():
         raise ValueError("找不到所选总表，请重新选择文件")
     layout = core.validate_source_workbook_columns(source)
+    # Reject an unsupported layout while choosing the file, before fetching ERP data.
+    with zipfile.ZipFile(source) as archive:
+        strings = core.read_shared_strings(archive) if "xl/sharedStrings.xml" in archive.namelist() else []
+        discover_layout(archive.read(core.WORKSHEET_PATH), strings, cycle)
     actual_start, actual_end = cycle.actual_window.iso()
     return_start, return_end = cycle.return_window.iso()
     queries = [{"key": "actual", "label": "实发数量", "payload": core.build_payload(actual_start, actual_end)}]

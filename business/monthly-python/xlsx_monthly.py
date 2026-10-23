@@ -37,6 +37,7 @@ QUALIFIED_REFERENCE_RE = re.compile(
     r"(?P<reference>\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?|"
     r"\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3})"
 )
+PEER_HEADER_RE = re.compile(r"^(?:(?P<month>1[0-2]|[1-9])月)?同期销量$")
 MONTH_HEADER_RE = re.compile(r"^(?P<month>1[0-2]|[1-9])月实发(?:\([^)]*\))?$")
 
 
@@ -135,7 +136,7 @@ def discover_layout(
     for match in CELL_RE.finditer(sheet_xml):
         text = normalize_header(_cell_text(match, shared_strings))
         if (
-            text in {"同期销量", "变化情况"}
+            text == "变化情况" or PEER_HEADER_RE.fullmatch(text)
             or "退货率" in text
             or MONTH_HEADER_RE.fullmatch(text)
         ):
@@ -151,12 +152,12 @@ def discover_layout(
     peer_matches = [
         (col, row)
         for col, row, text in cells
-        if text == "同期销量"
+        if PEER_HEADER_RE.fullmatch(text)
         and row == change_row
         and column_number(col) < column_number(change_col)
     ]
     if not peer_matches:
-        raise ValueError("expected at least one 同期销量 header before 变化情况, found 0")
+        raise ValueError("未找到“同期销量”表头（支持“9月同期销量”等带月份写法）；请确认它与“变化情况”在同一行且位于左侧。")
     peer_col, peer_row = max(peer_matches, key=lambda item: column_number(item[0]))
     before_return_col, before_return_row = unique_header(
         "发货前退货率",
@@ -400,6 +401,13 @@ def insert_month_column(
     old_actual_number = column_number(layout.actual_col)
     shifted_actual_col = column_label(old_actual_number + 1)
     inserted_col = column_label(insert_number)
+    # Preserve the plain header; advance an explicitly labelled peer month on rollover.
+    labelled_peer = any(
+        _cell_col(cell) == layout.peer_col and _cell_row(cell) == layout.header_row
+        and (peer := PEER_HEADER_RE.fullmatch(normalize_header(_cell_text(cell, shared_strings))))
+        and peer.group("month")
+        for cell in CELL_RE.finditer(sheet_xml)
+    )
 
     def shift_cell_coordinate(match: re.Match[bytes]) -> bytes:
         number = column_number(match.group(2).decode("ascii"))
@@ -477,6 +485,11 @@ def insert_month_column(
             row = _insert_or_replace_cell(row, inserted_col, row_number, copied)
 
         if row_number == layout.header_row:
+            if labelled_peer:
+                row = _write_inline_header(
+                    row, column_label(insert_number + 1), row_number,
+                    f"{cycle.previous_month.month}月同期销量",
+                )
             row = _write_inline_header(
                 row,
                 inserted_col,

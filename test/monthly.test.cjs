@@ -21,7 +21,7 @@ test('bundled monthly bridge previews without changing the master, preserves med
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'toolkit-monthly-'));
  const paths=runtimePaths({isPackaged:false});
  const run=job=>runPython(paths,job);
- const {file,rows}=await fixture(directory),before=await fs.readFile(file);
+ const {file,rows}=await fixture(directory,{peerHeader:'8月同期销量'}),before=await fs.readFile(file);
  const plan=await run({action:'inspect',workbook:file,runDate:'2026-10-22'});
  assert.deepEqual(plan.cycle.actualWindow,['2026-10-01','2026-10-14']);assert.deepEqual(plan.cycle.returnWindow,['2026-09-01','2026-09-30']);
  assert.deepEqual(plan.queries.map(q=>q.payload.asTypes),['','5','1,2,7,8,10','5,1,2,7,8,10']);
@@ -44,4 +44,15 @@ test('monthly bridge blocks saving when critical SKUs are missing',async()=>{
  for(const key of ['actual','before','after','overall']){inputs[key]=path.join(directory,key+'.json');await fs.writeFile(inputs[key],JSON.stringify({data:{list:[]}}));}
  const preview=await run({action:'prepare',workbook:plan.workbook,sourceHash:plan.sourceHash,runDate:'2026-10-22',directory,inputs});assert.equal(preview.summary.canSave,false);assert(preview.summary.criticalFailures>0);assert.equal(preview.receipt,undefined);assert.deepEqual(await fs.readFile(file),before);
  await fs.rm(directory,{recursive:true,force:true});
+});
+
+test('monthly header problems are rejected during file selection',async()=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'toolkit-monthly-header-'));try{
+ const {file}=await fixture(directory,{peerHeader:'13月同期销量'});
+ await assert.rejects(runPython(runtimePaths({isPackaged:false}),{action:'inspect',workbook:file,runDate:'2026-10-23'}),/同期销量/);
+ }finally{await fs.rm(directory,{recursive:true,force:true});}
+});
+
+test('peer header variants preserve rollover, year boundaries and layout safeguards',()=>{
+ require('node:child_process').execFileSync(runtimePaths({isPackaged:false}).python,['-I','-B',path.join(__dirname,'monthly_headers.py')],{stdio:'pipe'});
 });
