@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "tools": {
+    "report": {
+      "source": "../4.丹姐表格",
+      "files": {
+        "reports.cjs": "modules/report/reports.cjs",
+        "report-config.json": "modules/report/report-config.json",
+        "report-speed.js": "modules/report/report-speed.js",
+        "workbook-style.cjs": "modules/report/workbook-style.cjs"
+      }
+    },
+    "price": {
+      "source": "../5.批量导入价格（三公）",
+      "files": {
+        "prices.cjs": "modules/price/prices.cjs"
+      }
+    },
+    "monthly": {
+      "source": "../1.快麦excel导入脚本",
+      "files": {
+        "chrome_erp_session.py": "business/monthly-python/chrome_erp_session.py",
+        "erp_excel_sync.py": "business/monthly-python/erp_excel_sync.py",
+        "monthly_schedule.py": "business/monthly-python/monthly_schedule.py",
+        "xlsx_monthly.py": "business/monthly-python/xlsx_monthly.py",
+        "sku_aliases.json": "business/monthly-python/sku_aliases.json",
+        "target_skus.txt": "business/monthly-python/target_skus.txt"
+      }
+    }
+  }
+}

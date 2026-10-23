@@ -9,7 +9,12 @@
     "dist:mac": "electron-builder --mac dmg",
     "dist:win": "electron-builder --win nsis",
     "prepare:runtimes": "node scripts/prepare-runtimes.cjs",
-    "test": "node --test test/*.test.cjs"
+    "test": "node --test test/*.test.cjs",
+    "tools:sync": "node scripts/sync-tools.cjs",
+    "tools:verify": "node scripts/sync-tools.cjs --verify",
+    "prepack": "npm run tools:verify",
+    "predist:mac": "npm run tools:verify",
+    "predist:win": "npm run tools:verify"
   },
   "devDependencies": {
     "electron": "^40.0.0",
@@ -29,7 +34,8 @@
       "updater.cjs",
       "update-config.json",
       "business/**/*",
-      "!business/monthly-python/**/*"
+      "!business/monthly-python/**/*",
+      "modules/**/*"
     ],
     "mac": {
       "extendInfo": {

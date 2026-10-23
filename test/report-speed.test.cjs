@@ -16,7 +16,7 @@ test('per-endpoint pacing, bounded rate-limit retries and permission failures',a
  calls=0;await assert.rejects(pacedRequest(async()=>{calls++;throw Error('权限不足');})('page'),/权限不足/);assert.equal(calls,1);
 });
 test('parallel report results stay in calendar and shop order with exact totals',async()=>{
- const cfg=require('../business/report-config.json');let activeMonths=new Set(),maximum=0;
+ const cfg=require('../modules/report/report-config.json');let activeMonths=new Set(),maximum=0;
  const raw=async(route,body)=>{const month=new Date(body.startTime+8*3600000).getUTCMonth()+1,kind=route.split('/').pop();if(kind==='sniff'){activeMonths.add(month);maximum=Math.max(maximum,activeMonths.size);await sleep(month===1?20:1);return {suc:true};}
  const list=cfg.shops.map(s=>({user_id:String(s.id),order_pay_amount:month+'.01',snapshot_refund_money:'0.10'}));
  if(kind==='page')return {suc:true,data:{list,page:{hasNext:false}}};activeMonths.delete(month);return {suc:true,data:{total:14,amount:{order_pay_amount:(month*14+.14).toFixed(2),snapshot_refund_money:'1.40'}}};};

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "tools": {
+    "report": {
+      "source": "../4.丹姐表格",
+      "commit": "5216b730ba29b49c3bbd892b9c2d2a2ec4ea8abd",
+      "dirty": false,
+      "files": {
+        "reports.cjs": {
+          "target": "modules/report/reports.cjs",
+          "sha256": "8221705ad373d920fecc720678d84197adef7ba7cd962737f394c970ec96071a"
+        },
+        "report-config.json": {
+          "target": "modules/report/report-config.json",
+          "sha256": "6816b879a65407d955104fc60430b50c0109f9a006278f2fc051b4668adbe542"
+        },
+        "report-speed.js": {
+          "target": "modules/report/report-speed.js",
+          "sha256": "052bc826428538d0c07db2f4ec7227ce4f23ed66adc29ace9a70e90d0eaeda89"
+        },
+        "workbook-style.cjs": {
+          "target": "modules/report/workbook-style.cjs",
+          "sha256": "ee5b42af78983bd2135dab44894ae5ea554c9adc6a03d2a0b2caeaf0915e8f59"
+        }
+      }
+    },
+    "price": {
+      "source": "../5.批量导入价格（三公）",
+      "commit": "3ffcacdefc74767a64ecce7cebe476fa4aeb78d4",
+      "dirty": false,
+      "files": {
+        "prices.cjs": {
+          "target": "modules/price/prices.cjs",
+          "sha256": "428a1ed3478c2699b93e32b6417b2fe5055d7b7b76f0e760a7015a7b2d8fa1ea"
+        }
+      }
+    },
+    "monthly": {
+      "source": "../1.快麦excel导入脚本",
+      "commit": "aecb477529517c3dd2327fa8638452b82e441e83",
+      "dirty": true,
+      "files": {
+        "chrome_erp_session.py": {
+          "target": "business/monthly-python/chrome_erp_session.py",
+          "sha256": "161d696ec517d40a26dec63f1f76ba57dc2c72cfb0008860e84b9a4b5f73fbe7"
+        },
+        "erp_excel_sync.py": {
+          "target": "business/monthly-python/erp_excel_sync.py",
+          "sha256": "4c733e2f64a8918c2d5b9e6c2c176f7db98316d9e2767087cf00a7bf5f4a290f"
+        },
+        "monthly_schedule.py": {
+          "target": "business/monthly-python/monthly_schedule.py",
+          "sha256": "6445271817bf4107a1672135ca91ae3d205f2c3864627d17a8e73a15741fb4bc"
+        },
+        "xlsx_monthly.py": {
+          "target": "business/monthly-python/xlsx_monthly.py",
+          "sha256": "5bf0640d65019580397a710f247db884a2891efa55333407bb7d1e136932d580"
+        },
+        "sku_aliases.json": {
+          "target": "business/monthly-python/sku_aliases.json",
+          "sha256": "d57389f511750facee389686e072c8508f92da09b9aeb0e4a1c917fc1fdf37af"
+        },
+        "target_skus.txt": {
+          "target": "business/monthly-python/target_skus.txt",
+          "sha256": "3680a4be9b41d25c978fc9619f388f8651c03d5b9048bd2dbca2099e9585bd2e"
+        }
+      }
+    }
+  }
+}
