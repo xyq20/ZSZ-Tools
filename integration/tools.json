@@ -26,6 +26,26 @@
         "sku_aliases.json": "business/monthly-python/sku_aliases.json",
         "target_skus.txt": "business/monthly-python/target_skus.txt"
       }
+    },
+    "taobao": {
+      "source": "../../../Documents/ChatGPT/淘宝素材上传（谭）",
+      "files": {
+        "scripts/fill-batch.js": "modules/taobao/scripts/fill-batch.js",
+        "scripts/finalize-batch.js": "modules/taobao/scripts/finalize-batch.js",
+        "scripts/run-prepared-batch.js": "modules/taobao/scripts/run-prepared-batch.js",
+        "scripts/validate-choices.js": "modules/taobao/scripts/validate-choices.js",
+        "source-rules.json": "modules/taobao/source-rules.json",
+        "model-config.json": "modules/taobao/model-config.json",
+        "scripts/catalog.js": "modules/taobao/scripts/catalog.js",
+        "scripts/model.js": "modules/taobao/scripts/model.js",
+        "scripts/state.js": "modules/taobao/scripts/state.js",
+        "scripts/platform.js": "modules/taobao/scripts/platform.js",
+        "scripts/publication-result.js": "modules/taobao/scripts/publication-result.js",
+        "caption-rules.json": "modules/taobao/caption-rules.json",
+        "topic-rules.json": "modules/taobao/topic-rules.json",
+        "test/workflow.test.js": "test/taobao-core.test.cjs",
+        "test/validate-choices.test.js": "test/taobao-validation.test.cjs"
+      }
     }
   }
 }

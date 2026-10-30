@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -14,7 +14,8 @@
     "tools:verify": "node scripts/sync-tools.cjs --verify",
     "prepack": "npm run tools:verify",
     "predist:mac": "npm run tools:verify",
-    "predist:win": "npm run tools:verify"
+    "predist:win": "npm run tools:verify",
+    "smoke:taobao": "node scripts/smoke-taobao.cjs"
   },
   "devDependencies": {
     "electron": "^40.0.0",
@@ -98,6 +99,7 @@
     "decimal.js": "^10.6.0",
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.2",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "playwright-core": "1.56.1"
   }
 }

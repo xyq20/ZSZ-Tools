@@ -1,5 +1,5 @@
-const views=['home','report','price','monthly'];
-const labels={home:'全部工具',report:'丹姐表格',price:'批量导入价格',monthly:'总表（双姐）'};
+const views=['home','report','price','monthly','taobao'];
+const labels={home:'全部工具',report:'丹姐表格',price:'批量导入价格',monthly:'总表（双姐）',taobao:'淘宝素材上传（谭）'};
 for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{
 const name=button.dataset.view;for(const id of views)document.getElementById(id).hidden=id!==name;
 document.getElementById('crumb').textContent=labels[name];
@@ -28,9 +28,10 @@ checkButton.addEventListener('click',async()=>{
 });
 downloadButton.addEventListener('click',async()=>{try{await window.desktop.downloadUpdate();updateDialog.close();}catch{updateStatus.textContent='无法打开下载地址，请重新检查更新。';}});
 
+let hasTaobaoFolder=false,taobaoReady=false;
 let busy=false,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false;
 const statusFor=tool=>document.getElementById(tool+'-progress');
-function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
+function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
 async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
@@ -73,3 +74,25 @@ document.getElementById('monthly-save').addEventListener('click',()=>run('monthl
 document.getElementById('monthly-export').addEventListener('click',()=>run('monthly',async()=>{const file=await call('monthly-export');if(file)statusFor('monthly').textContent='已导出核对明细：'+file;}));
 document.getElementById('monthly-reports').addEventListener('click',()=>run('monthly',()=>call('monthly-reports')));
 refreshActions();
+
+for(const action of ['settings','save-key','login','choose','prepare','publish','history'])document.getElementById('taobao-'+action).addEventListener('click',()=>run('taobao',async()=>{
+ if(action==='settings'||action==='save-key'){
+  const r=await call('taobao-'+action,...(action==='save-key'?[document.getElementById('taobao-key').value]:[]));
+  document.getElementById('taobao-key').value='';document.getElementById('taobao-config-status').textContent=`模型：${r.model} · 密钥：${r.hasKey?'已配置':'未配置'} · 浏览器：${r.browser||'请安装 Chrome 或 Edge'}`;return;
+ }
+ if(action==='login'){const r=await call('taobao-login');statusFor('taobao').textContent=r.message;return;}
+ if(action==='choose'){
+  const r=await call('taobao-choose');if(!r)return;taobaoReady=false;hasTaobaoFolder=true;
+  document.getElementById('taobao-folder').textContent=`${r.folder} · ${r.rows.length} 条视频 · 跳过已处理 ${r.skipped} 条`;
+  table('taobao-results',['文件','匹配词','记录状态'],r.rows.map(x=>[x.file,x.query,tbStatus(x.status)]));statusFor('taobao').textContent='目录已读取，请确认淘宝店铺后点击上传、生成并核验。';return;
+ }
+ if(action==='prepare'){
+  taobaoReady=false;statusFor('taobao').textContent='开始准备批次…';const r=await call('taobao-prepare');
+  table('taobao-results',['视频','文案','关联商品','商品 ID','话题'],r.choices.map(x=>[x.file,x.caption,x.product_name,x.product_id,x.topic_title]));taobaoReady=r.status==='ready';return;
+ }
+ if(action==='publish'){
+  try{const r=await call('taobao-publish');if(r){taobaoReady=false;statusFor('taobao').textContent=r.message;}}catch(e){taobaoReady=false;throw e;}return;
+ }
+ const rows=await call('taobao-history');table('taobao-results',['视频','提交时间','状态'],rows.map(x=>[x.file,new Date(x.at).toLocaleString('zh-CN'),tbStatus(x.status)]));
+}));
+function tbStatus(status){return {pending:'未提交',submitted:'已提交，待核实',unknown:'结果待核实，已锁定',published:'淘宝确认发布成功'}[status]||status;}

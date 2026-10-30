@@ -1,0 +1,5 @@
+const fs=require('node:fs/promises'),path=require('node:path');
+async function readState(file){try{const data=JSON.parse(await fs.readFile(file,'utf8'));if(!data||!data.records||Array.isArray(data.records)||typeof data.records!=='object'||!Array.isArray(data.captions)||Object.values(data.records).some(r=>!r||!['submitted','unknown','published'].includes(r.status)||typeof r.file!=='string'||typeof r.at!=='string'))throw Error('invalid journal');return data;}catch(e){if(e.code==='ENOENT')return {records:{},captions:[]};throw Error('本机发布记录损坏，请先恢复记录，避免重复上传');}}
+async function writeState(file,data){await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});const temp=file+'.tmp';await fs.writeFile(temp,JSON.stringify(data,null,2),{mode:0o600});await fs.rename(temp,file);}
+function assertRunnable(rows){const blocked=rows.filter(r=>['submitted','unknown','published'].includes(r.status));if(blocked.length)throw Error('以下视频已有发布或待核实记录，禁止重复提交：'+blocked.map(r=>r.file).join('、'));}
+module.exports={readState,writeState,assertRunnable};

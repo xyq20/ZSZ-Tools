@@ -1,0 +1,8 @@
+{
+  "base_url": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "thinking": {
+    "type": "disabled"
+  },
+  "batch_generation": true
+}

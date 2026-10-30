@@ -65,6 +65,73 @@
           "sha256": "3680a4be9b41d25c978fc9619f388f8651c03d5b9048bd2dbca2099e9585bd2e"
         }
       }
+    },
+    "taobao": {
+      "source": "../../../Documents/ChatGPT/淘宝素材上传（谭）",
+      "commit": "b0cbcebe6a9be30cb4a8baa217a573e280d110bb",
+      "dirty": false,
+      "files": {
+        "scripts/fill-batch.js": {
+          "target": "modules/taobao/scripts/fill-batch.js",
+          "sha256": "03e54b48b1a31f0171fbb109ed9c99ba20ca169fdb62cc06d6672473bd409812"
+        },
+        "scripts/finalize-batch.js": {
+          "target": "modules/taobao/scripts/finalize-batch.js",
+          "sha256": "7bcac526608be435881c402f3f39d4ef208dd7b12f1715e8183ef0ca165c35e1"
+        },
+        "scripts/run-prepared-batch.js": {
+          "target": "modules/taobao/scripts/run-prepared-batch.js",
+          "sha256": "c786993c3eb19b990f8debbef6294bd0de70e14d729edfa5dc45d25355d25bca"
+        },
+        "scripts/validate-choices.js": {
+          "target": "modules/taobao/scripts/validate-choices.js",
+          "sha256": "f2267d9405e1536df4f6ff217f25666afbf8cd886afd032a4300060946a5ac9d"
+        },
+        "source-rules.json": {
+          "target": "modules/taobao/source-rules.json",
+          "sha256": "a3e67f015d0f982a39d67fb4057002b5055c1200c2049ecc8af431cf9b8ce947"
+        },
+        "model-config.json": {
+          "target": "modules/taobao/model-config.json",
+          "sha256": "ec50d952f895e7b6a858329173afdacf68f52b5cdd8f471db398370ae0e6a99b"
+        },
+        "scripts/catalog.js": {
+          "target": "modules/taobao/scripts/catalog.js",
+          "sha256": "33ebd1808f0827f78b5a3cf8d25d97df8d2f0d0ceaa1be3e5691141b66149134"
+        },
+        "scripts/model.js": {
+          "target": "modules/taobao/scripts/model.js",
+          "sha256": "04d42250b848cb8240c93f259fb4a52338bd8450c1b38a8bdb58fe0c7eff8298"
+        },
+        "scripts/state.js": {
+          "target": "modules/taobao/scripts/state.js",
+          "sha256": "e4283b6447dcc2e5a593b927e4ac032b0d9b5b7098493ce1cd6bde9fe70ef769"
+        },
+        "scripts/platform.js": {
+          "target": "modules/taobao/scripts/platform.js",
+          "sha256": "4b6ed03861d07a115380418363883687a41ee7dfa9e6718f91bdb55a695d3222"
+        },
+        "scripts/publication-result.js": {
+          "target": "modules/taobao/scripts/publication-result.js",
+          "sha256": "7a5e7b97dac8a2a18f6e934831747149c08d9112e6e16c63f3202c6b575e776a"
+        },
+        "caption-rules.json": {
+          "target": "modules/taobao/caption-rules.json",
+          "sha256": "e0786d99b25d4898b447f73b3b664319646db42a31a13539f3a316ad5062eaf1"
+        },
+        "topic-rules.json": {
+          "target": "modules/taobao/topic-rules.json",
+          "sha256": "5c677dacfc293f7a42a0770a7935e8eb45c8f27a0fd0e2ac3c58059ce3c76230"
+        },
+        "test/workflow.test.js": {
+          "target": "test/taobao-core.test.cjs",
+          "sha256": "54509526aa6469165d4774aff0d0fc7487e5a16e18f5f66fcb44fc50da6262ca"
+        },
+        "test/validate-choices.test.js": {
+          "target": "test/taobao-validation.test.cjs",
+          "sha256": "0371707ca7a32f4191898360bec8a75cdefbe7f4fce9b7480210a5f404165f0a"
+        }
+      }
     }
   }
 }
