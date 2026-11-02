@@ -68,7 +68,7 @@
     },
     "taobao": {
       "source": "../../../Documents/ChatGPT/淘宝素材上传（谭）",
-      "commit": "b0cbcebe6a9be30cb4a8baa217a573e280d110bb",
+      "commit": "2ae01787aebcb0ec7cd7e152e64fd0e13b9950fa",
       "dirty": false,
       "files": {
         "scripts/fill-batch.js": {
@@ -77,7 +77,7 @@
         },
         "scripts/finalize-batch.js": {
           "target": "modules/taobao/scripts/finalize-batch.js",
-          "sha256": "7bcac526608be435881c402f3f39d4ef208dd7b12f1715e8183ef0ca165c35e1"
+          "sha256": "376919ab551d9b83952906bbb2d5af9ed03e34b952dfef24c71e6260dbfbed01"
         },
         "scripts/run-prepared-batch.js": {
           "target": "modules/taobao/scripts/run-prepared-batch.js",
@@ -97,7 +97,7 @@
         },
         "scripts/catalog.js": {
           "target": "modules/taobao/scripts/catalog.js",
-          "sha256": "33ebd1808f0827f78b5a3cf8d25d97df8d2f0d0ceaa1be3e5691141b66149134"
+          "sha256": "a4ea8d5e93f9e34da38fa9c692af713b4d4b6e40481c0d84948b6069aac6c46d"
         },
         "scripts/model.js": {
           "target": "modules/taobao/scripts/model.js",
@@ -125,7 +125,7 @@
         },
         "test/workflow.test.js": {
           "target": "test/taobao-core.test.cjs",
-          "sha256": "54509526aa6469165d4774aff0d0fc7487e5a16e18f5f66fcb44fc50da6262ca"
+          "sha256": "e43e16f269d7a7adbf7281dfea929f3be6d58e443cfa00a5db097bfb5ec0983d"
         },
         "test/validate-choices.test.js": {
           "target": "test/taobao-validation.test.cjs",

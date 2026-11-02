@@ -1,5 +1,13 @@
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-function productQuery(file){return path.basename(file).replace(/\.[^.]+$/,'').replace(/\s*\d+$/,'').trim();}
+
+// A trailing number is the clip sequence marker (for example `红海 2.mp4`),
+// while numbers inside the product name are meaningful (`xx1xx.mp4`). Keep
+// this rule in one place so matching and final verification cannot diverge.
+function productNameFromFile(file){
+ const stem=path.basename(String(file)).replace(/\.[^.]+$/,'').trim();
+ return stem.replace(/(?:\s+|[_-])?\d+$/,'').trim() || stem;
+}
+function productQuery(file){return productNameFromFile(file);}
 async function scanFolder(folder,history={}){
  const rows=[];let skipped=0;
  for(const e of (await fs.readdir(folder,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'))){
@@ -16,4 +24,4 @@ async function scanFolder(folder,history={}){
  if(new Set(rows.map(x=>x.fingerprint)).size!==rows.length)throw Error('目录包含内容相同的视频，请先去重');
  return {folder,rows,skipped};
 }
-module.exports={scanFolder,productQuery};
+module.exports={scanFolder,productQuery,productNameFromFile};

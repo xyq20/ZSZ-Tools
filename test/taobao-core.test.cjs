@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
-const {scanFolder,productQuery}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'catalog');
+const {scanFolder,productQuery,productNameFromFile}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'catalog');
 const {generateChoices,validTopic}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'model');
 const {assertRunnable,readState,writeState}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'state');
 test('folder scan is read only, handles unnumbered names and excludes marked files',async()=>{
@@ -7,6 +7,12 @@ test('folder scan is read only, handles unnumbered names and excludes marked fil
  try{
   await fs.writeFile(path.join(dir,'红海.mp4'),'one');await fs.writeFile(path.join(dir,'红海 2.mp4'),'two');await fs.writeFile(path.join(dir,'已传 3.mp4'),'three');
   const r=await scanFolder(dir);assert.equal(r.rows.length,2);assert.equal(r.skipped,1);assert.equal(productQuery('红海.mp4'),'红海');assert.equal(productQuery('红海 2.mp4'),'红海');
+  assert.equal(productQuery('xxxx1.mp4'),'xxxx');
+  assert.equal(productQuery('xx1xx.mp4'),'xx1xx');
+  assert.equal(productQuery('xx1xx 12.MP4'),'xx1xx');
+  assert.equal(productQuery('xx1xx-12.mp4'),'xx1xx');
+  assert.equal(productQuery('xx1xx_12.mp4'),'xx1xx');
+  assert.equal(productNameFromFile('xx1xx.mp4'),'xx1xx');
   assertRunnable(r.rows);assert.throws(()=>assertRunnable([{...r.rows[0],status:'unknown'}]));
   await fs.writeFile(path.join(dir,'重复.mp4'),'one');await assert.rejects(scanFolder(dir),/相同/);
  }finally{await fs.rm(dir,{recursive:true,force:true});}

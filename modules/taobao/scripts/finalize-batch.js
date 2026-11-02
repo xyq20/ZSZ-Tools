@@ -1,4 +1,5 @@
 const { validateChoices } = require('./validate-choices');
+const { productNameFromFile } = require('./catalog');
 /** Verify the entire visible batch. Publishing is opt-in and never retried here. */
 async function finalizeBatch(page, choices, { publish = false } = {}) {
  validateChoices(choices);
@@ -23,7 +24,7 @@ async function finalizeBatch(page, choices, { publish = false } = {}) {
     const tags = (await f.locator('.rich-text-content').innerText()).replace(/\uFEFF/g, '');
     const chipCount = await f.locator('.rich-text-content [data-cangjie-void=true]').count();
     const body = await f.locator('#root').innerText();
-    const productName = item.product_name || item.file.replace(/\s*\d+\.mp4$/i, '');
+    const productName = item.product_name || productNameFromFile(item.file);
     if (!caption || [...caption].length > 30 || chipCount !== 4 ||
         tags !== '好物讲解精选好物商品展示时尚穿搭' ||
         !await f.getByRole('radio', { name: '内容无需标注', exact: true }).isChecked() ||
