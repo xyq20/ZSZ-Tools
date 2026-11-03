@@ -46,6 +46,21 @@
         "test/workflow.test.js": "test/taobao-core.test.cjs",
         "test/validate-choices.test.js": "test/taobao-validation.test.cjs"
       }
+    },
+    "sycm": {
+      "source": "../3.生意参谋数据抓取",
+      "files": {
+        "scripts/run.py": "business/sycm-python/run.py",
+        "scripts/excel_patch.py": "business/sycm-python/excel_patch.py",
+        "scripts/sycm_collect.py": "business/sycm-python/sycm_collect.py",
+        "scripts/sycm_browser.py": "business/sycm-python/sycm_browser.py",
+        "scripts/sycm_chart.py": "business/sycm-python/sycm_chart.py",
+        "scripts/sycm_main_pic.py": "business/sycm-python/sycm_main_pic.py",
+        "scripts/sycm_login.py": "business/sycm-python/sycm_login.py",
+        "scripts/sycm_round.py": "business/sycm-python/sycm_round.py",
+        "scripts/sycm_time.py": "business/sycm-python/sycm_time.py",
+        "scripts/sycm_lock.py": "business/sycm-python/sycm_lock.py"
+      }
     }
   }
 }

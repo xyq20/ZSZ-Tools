@@ -1,5 +1,5 @@
-const views=['home','report','price','monthly','taobao'];
-const labels={home:'全部工具',report:'丹姐表格',price:'批量导入价格',monthly:'总表（双姐）',taobao:'淘宝素材上传（谭）'};
+const views=['home','report','price','monthly','taobao','sycm'];
+const labels={sycm:'生意参谋数据抓取（董卓）',home:'全部工具',report:'丹姐表格',price:'批量导入价格',monthly:'总表（双姐）',taobao:'淘宝素材上传（谭）'};
 for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{
 const name=button.dataset.view;for(const id of views)document.getElementById(id).hidden=id!==name;
 document.getElementById('crumb').textContent=labels[name];
@@ -28,14 +28,15 @@ checkButton.addEventListener('click',async()=>{
 });
 downloadButton.addEventListener('click',async()=>{try{await window.desktop.downloadUpdate();updateDialog.close();}catch{updateStatus.textContent='无法打开下载地址，请重新检查更新。';}});
 
+let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;
 let busy=false,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false;
 const statusFor=tool=>document.getElementById(tool+'-progress');
-function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
+function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
 async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
-window.desktop?.onProgress(p=>{statusFor(p.tool).textContent=p.message;});
+window.desktop?.onProgress(p=>{statusFor(p.tool).textContent=p.message;if(p.tool==='sycm'){const log=document.getElementById('sycm-log');log.textContent=(log.textContent+p.message+'\n').slice(-30000);log.scrollTop=log.scrollHeight;}});
 for(const button of document.querySelectorAll('[data-login]'))button.addEventListener('click',async()=>{const tool=button.dataset.login;try{await call('login',tool);statusFor(tool).textContent='请在登录窗口完成登录，返回后点击查询。';}catch(e){statusFor(tool).textContent=e.message;}});
 document.getElementById('choose').addEventListener('click',()=>run('price',async()=>{const b=await call('choose');if(!b)return;hasBook=true;hasPrices=false;hasFillablePrices=false;document.getElementById('book').textContent=`${b.name} · ${b.sheet} · ${b.rows} 行`;document.getElementById('price-results').replaceChildren();statusFor('price').textContent=`文件已读取：待补价格 ${b.pending} 行，已有内容或公式 ${b.skipped} 行将跳过。`;}));
 document.getElementById('price-query').addEventListener('click',()=>run('price',async()=>{hasPrices=false;hasFillablePrices=false;document.getElementById('price-results').replaceChildren();statusFor('price').textContent='开始查询空白价格…';const rows=await call('price-query');hasPrices=true;table('price-results',['行','货号','商品名称','原价格','淘宝价格','状态','说明'],rows.map(r=>[r.row,r.code,r.name,r.original,r.price,r.status,r.reason]));const n=rows.filter(r=>r.status==='待填入').length,skipped=rows.filter(r=>['已有价格','公式保留'].includes(r.status)).length;hasFillablePrices=n>0;statusFor('price').textContent=`核对完成：跳过 ${skipped} 行，${n} 行可补价格，${rows.length-skipped-n} 行待核对。${n?'请核对结果后确认填入。':''}`;}));
@@ -96,3 +97,18 @@ for(const action of ['settings','save-key','login','choose','prepare','publish',
  const rows=await call('taobao-history');table('taobao-results',['视频','提交时间','状态'],rows.map(x=>[x.file,new Date(x.at).toLocaleString('zh-CN'),tbStatus(x.status)]));
 }));
 function tbStatus(status){return {pending:'未提交',submitted:'已提交，待核实',unknown:'结果待核实，已锁定',published:'淘宝确认发布成功'}[status]||status;}
+
+document.getElementById('sycm-login').addEventListener('click',()=>run('sycm',async()=>{statusFor('sycm').textContent='正在打开登录窗口…';const r=await call('sycm-login');statusFor('sycm').textContent=r.message;}));
+document.getElementById('sycm-choose').addEventListener('click',()=>run('sycm',async()=>{const r=await call('sycm-choose');if(!r)return;hasSycmBook=true;document.getElementById('sycm-book').textContent=r.file;statusFor('sycm').textContent='已选择总表，将在本机副本中全量刷新本轮数据。';}));
+document.getElementById('sycm-start').addEventListener('click',()=>run('sycm',async()=>{
+ document.getElementById('sycm-log').textContent='';hasSycmResult=true;statusFor('sycm').textContent='正在创建工作副本…';
+ const r=await call('sycm-start',{mode:document.getElementById('sycm-mode').value,color:document.getElementById('sycm-color').value,name:document.getElementById('sycm-name').value});
+ const s=r.summary;statusFor('sycm').textContent=`${r.incomplete?'部分完成，请查看失败记录':'本次处理完成'}：成功 ${s.ok}，失败 ${s.fail}，跳过 ${s.skipped}。结果：${r.file}`;
+}));
+document.getElementById('sycm-results').addEventListener('click',()=>run('sycm',async()=>{await call('sycm-results');}));
+
+document.getElementById('sycm-resume').addEventListener('click',()=>run('sycm',async()=>{
+ document.getElementById('sycm-log').textContent='';statusFor('sycm').textContent='正在读取上轮任务…';
+ const r=await call('sycm-resume'),s=r.summary;hasSycmResult=true;
+ statusFor('sycm').textContent=`${r.incomplete?'部分完成，请查看失败记录':'本次处理完成'}：成功 ${s.ok}，失败 ${s.fail}，本轮已完成跳过 ${s.skipped}。结果：${r.file}`;
+}));

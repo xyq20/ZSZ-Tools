@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -12,10 +12,12 @@
     "test": "node --test test/*.test.cjs",
     "tools:sync": "node scripts/sync-tools.cjs",
     "tools:verify": "node scripts/sync-tools.cjs --verify",
-    "prepack": "npm run tools:verify",
-    "predist:mac": "npm run tools:verify",
-    "predist:win": "npm run tools:verify",
-    "smoke:taobao": "node scripts/smoke-taobao.cjs"
+    "prepack": "npm run tools:verify && node scripts/check-sycm-runtime.cjs",
+    "predist:mac": "npm run tools:verify && node scripts/check-sycm-runtime.cjs mac-arm64",
+    "predist:win": "npm run tools:verify && node scripts/check-sycm-runtime.cjs win-x64",
+    "smoke:taobao": "node scripts/smoke-taobao.cjs",
+    "prepare:sycm": "node scripts/prepare-sycm.cjs",
+    "smoke:sycm": "node scripts/smoke-sycm.cjs"
   },
   "devDependencies": {
     "electron": "^40.0.0",
@@ -36,7 +38,8 @@
       "update-config.json",
       "business/**/*",
       "!business/monthly-python/**/*",
-      "modules/**/*"
+      "modules/**/*",
+      "!business/sycm-python/**/*"
     ],
     "mac": {
       "extendInfo": {
@@ -91,6 +94,13 @@
           "**/*",
           "!**/__pycache__/**",
           "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "business/sycm-python",
+        "to": "sycm-python",
+        "filter": [
+          "**/*.py"
         ]
       }
     ]

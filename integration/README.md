@@ -39,3 +39,13 @@
 业务源码保留在 `Documents/ChatGPT/淘宝素材上传（谭）`，来源和文件白名单登记为 `taobao`。修改来源后运行 `npm run tools:sync -- taobao --apply`，再运行 `npm test` 和 `npm run tools:verify`。业务逻辑测试也以白名单导入，分别验证源项目和实际集成副本。
 
 工具箱的 `business/taobao.cjs` 管理独立 Chrome/Edge 会话、文件选择、IPC、密钥加密和发布确认。用户数据保存在 `team-toolkit/taobao`，不在 Git 或打包文件清单中。Chromium 不随包下载；用户需已安装 Chrome 或 Edge。Windows 使用 Control 快捷键，Mac 使用 Meta。
+
+## 生意参谋数据抓取（董卓）
+
+来源是 `../3.生意参谋数据抓取`，登记为 `sycm`，10 个运行文件白名单导入 `business/sycm-python`。修改来源后执行 `npm run tools:sync -- sycm --apply`。`SYCM_DATA_DIR` 指定每次任务的本机副本目录，`SYCM_AUTH_DIR` 指定工具箱专属登录目录；未设置时原独立脚本行为不变。工具箱会通过 Playwright 管理独立 Chrome/Edge 进程，不占用独立项目的固定调试端口，也不终止其浏览器。
+
+首次准备：`npm run prepare:runtimes`，然后分别执行 `npm run prepare:sycm -- mac-arm64`、`npm run prepare:sycm -- win-x64`。后者通过构建机 Python/pip 安装目标平台 wheel，自动写入 Windows 嵌入式 Python 的 `python312._pth`，内含 Playwright、openpyxl、Pillow 和 tzdata。Windows 构建机可通过 `SYCM_BUILD_PYTHON` 指定有 pip 的构建用 Python；最终用户无需安装 Python，只需 Chrome 或 Edge。不能混用 Mac 与 Windows 二进制依赖。
+
+新一轮建立独立本机副本并保留原文件名（支持自动年月改名），全量刷新选定范围。`last-task.json` 保存上轮目录和筛选，重启工具箱后仍可继续；续跑复用该目录和 `round_<mode>.json`，不重新复制原表。Python 校验日期、范围和工作簿摘要；非完整结束明确显示部分完成。Windows 使用 msvcrt 字节锁，Mac 使用 flock。
+
+发布资源只包含 Python 源码及私有运行时，不含原项目工作簿、登录信息和历史数据。运行结果位于用户数据目录 `team-toolkit/sycm/runs`，登录信息位于 `team-toolkit/sycm/auth`。

@@ -132,6 +132,53 @@
           "sha256": "0371707ca7a32f4191898360bec8a75cdefbe7f4fce9b7480210a5f404165f0a"
         }
       }
+    },
+    "sycm": {
+      "source": "../3.生意参谋数据抓取",
+      "commit": "fa082d949fc7ddba95b469fa1d007acb2e5de338",
+      "dirty": true,
+      "files": {
+        "scripts/run.py": {
+          "target": "business/sycm-python/run.py",
+          "sha256": "92b3a281a834b6053f45fe35db0bc7704f1b8c3c8d536190d87b784223b357e8"
+        },
+        "scripts/excel_patch.py": {
+          "target": "business/sycm-python/excel_patch.py",
+          "sha256": "d0a3174385122c49b9f6725cefc92a9badeea3d62959cb25391ab302d5b27eb7"
+        },
+        "scripts/sycm_collect.py": {
+          "target": "business/sycm-python/sycm_collect.py",
+          "sha256": "8e62479ac1c3638d37fc5a12cfe9e4fc686e42924e8c7da90d86b237bd4fd897"
+        },
+        "scripts/sycm_browser.py": {
+          "target": "business/sycm-python/sycm_browser.py",
+          "sha256": "78b5a65feef5fb483d06917be83be3041eedc2bde7d3053a6585d95d006d884a"
+        },
+        "scripts/sycm_chart.py": {
+          "target": "business/sycm-python/sycm_chart.py",
+          "sha256": "442bff6e5b827786001323a16063157e06fea610efe160cef04de00db82d6522"
+        },
+        "scripts/sycm_main_pic.py": {
+          "target": "business/sycm-python/sycm_main_pic.py",
+          "sha256": "5255aca708a42580d3c9fb0c01de641fa4fcd92465116d009fb995a636e10c34"
+        },
+        "scripts/sycm_login.py": {
+          "target": "business/sycm-python/sycm_login.py",
+          "sha256": "45d1f04408bfb284337a36fdc5fa7e91ef0ae73ea404569beabe18baf32886e1"
+        },
+        "scripts/sycm_round.py": {
+          "target": "business/sycm-python/sycm_round.py",
+          "sha256": "5d1a635ebf55eaef8e5a539f4dc513617d16892cc93046646fca7bc317696b6b"
+        },
+        "scripts/sycm_time.py": {
+          "target": "business/sycm-python/sycm_time.py",
+          "sha256": "e946d9e8a448444e68d068b785a04393427df473b6f5e467fbca848705238f99"
+        },
+        "scripts/sycm_lock.py": {
+          "target": "business/sycm-python/sycm_lock.py",
+          "sha256": "35fb012bb4ca146d89266e83eb17c63f8f4066887ab56fbd866d19f6e280dd11"
+        }
+      }
     }
   }
 }
