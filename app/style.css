@@ -9,3 +9,5 @@ dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radiu
 #monthly-progress{overflow-wrap:anywhere;color:#576579}#monthly-book{overflow-wrap:anywhere}.cards{grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}#monthly .form label{max-width:230px}#monthly .notice{line-height:1.9;margin:18px 0}
 
 #taobao-progress,#taobao-folder{overflow-wrap:anywhere;color:#576579}#taobao details{padding:18px;background:white;border:1px solid #e5e8ed;border-radius:8px}#taobao summary{cursor:pointer}#taobao .result-table td{white-space:normal;min-width:130px}#taobao .form label{min-width:260px}
+
+.monthly-help{display:grid;gap:10px;margin:20px 0}.monthly-help details{padding:14px 18px;background:#fff;border:1px solid #e5e8ed;border-radius:8px}.monthly-help summary{cursor:pointer;font-weight:500}.monthly-help summary:focus-visible{outline:3px solid #96c8b0;outline-offset:4px}.monthly-help ul,.monthly-help ol{margin:12px 0 0;padding-left:22px;color:#576579;line-height:1.9}

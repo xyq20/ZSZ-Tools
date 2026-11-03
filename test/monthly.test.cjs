@@ -56,3 +56,31 @@ test('monthly header problems are rejected during file selection',async()=>{
 test('peer header variants preserve rollover, year boundaries and layout safeguards',()=>{
  require('node:child_process').execFileSync(runtimePaths({isPackaged:false}).python,['-I','-B',path.join(__dirname,'monthly_headers.py')],{stdio:'pipe'});
 });
+
+test('run-month names stay consistent through month-start, mid-month, repeats and year rollover',async()=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'toolkit-monthly-calendar-'));
+ try{
+  const {file,rows}=await fixture(directory),run=job=>runPython(runtimePaths({isPackaged:false}),job),inputs={};
+  for(const key of ['actual','before','after','overall']){inputs[key]=path.join(directory,key+'.json');await fs.writeFile(inputs[key],JSON.stringify({data:{list:rows}}));}
+  let current=file;
+  for(const [runDate,name,actualWindow,inserted] of [
+   ['2026-10-02','26年10月分级总表.xlsx',['2026-09-01','2026-09-30'],false],
+   ['2026-10-02','26年10月分级总表.xlsx',['2026-09-01','2026-09-30'],false],
+   ['2026-10-15','26年10月分级总表.xlsx',['2026-10-01','2026-10-14'],true],
+   ['2026-11-02','26年11月分级总表.xlsx',['2026-10-01','2026-10-31'],false],
+   ['2026-11-15','26年11月分级总表.xlsx',['2026-11-01','2026-11-14'],true],
+   ['2026-12-01','26年12月分级总表.xlsx',['2026-11-01','2026-11-30'],false],
+   ['2026-12-15','26年12月分级总表.xlsx',['2026-12-01','2026-12-14'],true],
+   ['2027-01-01','27年1月分级总表.xlsx',['2026-12-01','2026-12-31'],false],
+   ['2027-01-15','27年1月分级总表.xlsx',['2027-01-01','2027-01-14'],true],
+  ]){
+   const before=await fs.readFile(current),plan=await run({action:'inspect',workbook:current,runDate});
+   assert.equal(path.basename(plan.targetWorkbook),name);assert.deepEqual(plan.cycle.actualWindow,actualWindow);
+   const preview=await run({action:'prepare',workbook:plan.workbook,sourceHash:plan.sourceHash,runDate,directory,inputs});
+   assert.equal(preview.summary.workbook,plan.targetWorkbook);assert.equal(preview.summary.insertedMonthColumn,inserted);assert.equal(preview.summary.canSave,true);
+   assert.deepEqual(await fs.readFile(current),before);
+   const saved=await run({action:'commit',receipt:preview.receipt});assert.equal(saved.workbook,plan.targetWorkbook);assert.deepEqual(await fs.readFile(saved.backup),before);
+   current=saved.workbook;
+  }
+ }finally{await fs.rm(directory,{recursive:true,force:true});}
+});

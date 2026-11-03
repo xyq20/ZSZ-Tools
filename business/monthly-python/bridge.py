@@ -38,7 +38,7 @@ def cycle_data(cycle):
 
 def inspect_job(job):
     cycle = resolve_sync_cycle(date.fromisoformat(job["runDate"]))
-    source, target = core.resolve_monthly_workbook(Path(job["workbook"]), cycle.actual_month)
+    source, target = core.resolve_monthly_workbook(Path(job["workbook"]), cycle.run_date)
     source, target = source.resolve(), target.resolve()
     if not source.is_file():
         raise ValueError("找不到所选总表，请重新选择文件")
@@ -72,7 +72,7 @@ def prepare_job(job):
     source = Path(job["workbook"]).resolve()
     verify_source(source, job["sourceHash"])
     cycle = resolve_sync_cycle(date.fromisoformat(job["runDate"]))
-    target = core.monthly_workbook_path(source, cycle.actual_month)
+    target = core.monthly_workbook_path(source, cycle.run_date)
     if target != source and target.exists():
         raise ValueError("目标月份总表已经存在，请重新选择该月份总表后查询")
     documents = {key: core.load_json(Path(value)) for key, value in job["inputs"].items()}

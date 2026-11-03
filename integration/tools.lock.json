@@ -46,7 +46,7 @@
         },
         "erp_excel_sync.py": {
           "target": "business/monthly-python/erp_excel_sync.py",
-          "sha256": "4c733e2f64a8918c2d5b9e6c2c176f7db98316d9e2767087cf00a7bf5f4a290f"
+          "sha256": "f401580fe88cf232493049f25f86efe8bd0155a3895bad99603e8ad841a63faf"
         },
         "monthly_schedule.py": {
           "target": "business/monthly-python/monthly_schedule.py",

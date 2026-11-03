@@ -27,9 +27,15 @@ app.whenReady().then(async()=>{
   await win.loadFile(path.join(project,'app/index.html'));
   const evaluate=expression=>win.webContents.executeJavaScript(expression,true);
   const wait=async expression=>{for(let i=0;i<400;i++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out waiting for UI: '+expression);};
-  await evaluate(\"document.querySelector('aside [data-view=monthly]').click();document.getElementById('monthly-date').value='2026-10-22';document.getElementById('monthly-choose').click()\");
+  await evaluate(\"document.querySelector('aside [data-view=monthly]').click();document.getElementById('monthly-date').value='2026-10-02';document.getElementById('monthly-choose').click()\");
   await wait(\"document.getElementById('monthly-progress').textContent.includes('总表已读取')\");
   assert.equal(await evaluate(\"document.getElementById('crumb').textContent\"),'总表（双姐）');
+  assert.equal(await evaluate("document.querySelectorAll('.monthly-help details').length"),2);
+  await evaluate("document.querySelectorAll('.monthly-help details').forEach(d=>d.open=true)");
+  assert.equal(await evaluate("document.querySelector('.monthly-help').textContent.includes('文件按运行月份命名')"),true);
+  await new Promise(r=>setTimeout(r,250));
+  fs.writeFileSync(path.join(directory,'help.png'),(await win.webContents.capturePage()).toPNG());
+  await evaluate("document.querySelectorAll('.monthly-help details').forEach(d=>d.open=false)");
   await evaluate(\"document.querySelector('[data-login=monthly]').click()\");
   await new Promise(r=>setTimeout(r,300));
   const login=BrowserWindow.getAllWindows().find(w=>w!==win);assert(login);assert.equal(login.getParentWindow(),null);

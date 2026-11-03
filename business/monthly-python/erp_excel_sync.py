@@ -1287,7 +1287,7 @@ def run_monthly_sync(args: argparse.Namespace, run_date: date | None = None) -> 
         raise SystemExit("Master workbook is required; set workbook in config.json or pass --workbook")
     workbook, target_workbook = resolve_monthly_workbook(
         configured_workbook,
-        cycle.actual_month,
+        run_date,
     )
     if not workbook.exists():
         raise SystemExit(
