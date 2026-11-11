@@ -6,7 +6,10 @@ const { finalizeBatch } = require('./finalize-batch');
 async function runPreparedBatch(page, choices, { publish = false } = {}) {
   // Snapshot renderer/model input so it cannot change while the page is being filled.
   choices = structuredClone(choices);
-  await fillBatch(page, choices);
-  return finalizeBatch(page, choices, { publish });
+  const filled=await fillBatch(page, choices);
+  const failures=[...(filled.failures||[])];
+  if(!filled.choices?.length)return {status:'no_success',clicked:false,verified:[],choices:[],failed:failures};
+  const result=await finalizeBatch(page, filled.choices, { publish });
+  return {...result,failed:[...failures,...(result.failed||[])]};
 }
 module.exports = { runPreparedBatch };

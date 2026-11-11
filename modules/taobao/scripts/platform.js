@@ -1,7 +1,33 @@
 const {productQuery}=require('./catalog');
 const URL='https://qn.taobao.com/home.htm/guanghe-creator/creation-tool/batch-publish';
+function errorMessage(error){return error instanceof Error?error.message:String(error||'未知错误');}
+function withFailures(rows,failures){Object.defineProperty(rows,'failures',{value:failures,enumerable:false});return rows;}
 function frame(page){const f=page.frames().find(f=>f.url().includes('/qianniu-batch-video'));if(!f)throw Error('未找到淘宝批量编辑页，请先登录并打开批量发布');return f;}
 async function closeHint(f){const b=f.getByRole('button',{name:'关闭',exact:true});if(await b.count()===1&&await b.isVisible())await b.click();}
+async function removeVideoFromBatch(f,file){
+ try{
+  const clicked=await f.evaluate(filename=>{
+   const exact=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent.trim()===filename);
+   if(!exact)return false;
+   let node=exact;
+   for(let depth=0;node&&depth<8;depth++,node=node.parentElement){
+    const controls=[...node.querySelectorAll('button,[role="button"]')];
+    const labelled=controls.find(c=>/(删除|移除|delete|remove|trash)/i.test([c.getAttribute('aria-label'),c.getAttribute('title'),c.className].filter(Boolean).join(' ')));
+    if(labelled){labelled.click();return true;}
+    if(controls.length===1){controls[0].click();return true;}
+   }
+   return false;
+  },file);
+  if(!clicked)return false;
+  const dialog=f.getByRole('dialog');
+  if(await dialog.count()){
+   const confirm=dialog.getByRole('button',{name:/确认|删除|移除/}).last();
+   if(await confirm.count()&&await confirm.isVisible())await confirm.click();
+  }
+  await f.getByText(file,{exact:true}).waitFor({state:'detached',timeout:5000}).catch(()=>{});
+  return await f.getByText(file,{exact:true}).count()===0;
+ }catch{return false;}
+}
 async function searchProduct(f,item){
  await f.getByText(item.file,{exact:true}).click();
  await f.getByPlaceholder('加个标题让内容更吸引人').waitFor();
@@ -17,16 +43,23 @@ async function searchProduct(f,item){
 }
 async function productCandidates(f){return f.locator('a[href*="item.taobao.com"]').evaluateAll(es=>es.map(e=>({id:new URL(e.href).searchParams.get('id'),title:e.textContent.trim()})));}
 async function collectProducts(page,items,progress=()=>{}){
- const f=frame(page);await closeHint(f);const out=[];
+ const f=frame(page);await closeHint(f);const out=[],failures=[];
  for(const [index,item] of items.entries()){
   progress(`匹配商品 ${index+1}/${items.length}：${item.file}`);
-  const query=await searchProduct(f,item),candidates=await productCandidates(f);
-  const matches=candidates.filter(c=>c.title.includes('【'+query+'】')||c.title===query);
-  if(matches.length!==1)throw Error(`商品匹配${matches.length?'不唯一':'失败'}：${item.file}。请核对商品名`);
-  out.push({...item,query,product_id:matches[0].id,product_name:matches[0].title});
-  await f.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
+  try{
+   const query=await searchProduct(f,item),candidates=await productCandidates(f);
+   const matches=candidates.filter(c=>c.title.includes('【'+query+'】')||c.title===query);
+   if(matches.length!==1)throw Error(`商品匹配${matches.length?'不唯一':'失败'}：${item.file}。请核对商品名`);
+   out.push({...item,query,product_id:matches[0].id,product_name:matches[0].title});
+   await f.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
+  }catch(error){
+   const dialog=f.getByRole('dialog');
+   if(await dialog.count()){const cancel=dialog.getByRole('button',{name:'取消',exact:true});if(await cancel.count())await cancel.click().catch(()=>{});}
+   const removed=await removeVideoFromBatch(f,item.file);
+   failures.push({file:item.file,stage:'商品匹配',error:errorMessage(error),removed});
+  }
  }
- return out;
+ return withFailures(out,failures);
 }
 async function fetchTopics(page){return frame(page).evaluate(async()=>{
  const call=async(tabId,cursor)=>{
@@ -48,13 +81,15 @@ async function fetchTopics(page){return frame(page).evaluate(async()=>{
  return [...all.values()];
  });}
 async function inspectMedia(context,rows){
- const media=await context.newPage(),out=[];
+ const media=await context.newPage(),out=[],failures=[];
  try{for(const row of rows){
-  await media.goto(require('node:url').pathToFileURL(row.path).href,{waitUntil:'domcontentloaded'});
-  await media.waitForFunction(()=>Number.isFinite(document.querySelector('video')?.duration),null,{timeout:15000});
-  out.push({...row,duration:await media.locator('video').evaluate(v=>v.duration)});
+  try{
+   await media.goto(require('node:url').pathToFileURL(row.path).href,{waitUntil:'domcontentloaded'});
+   await media.waitForFunction(()=>Number.isFinite(document.querySelector('video')?.duration),null,{timeout:15000});
+   out.push({...row,duration:await media.locator('video').evaluate(v=>v.duration)});
+  }catch(error){failures.push({file:row.file,stage:'读取视频时长',error:errorMessage(error),removed:true});}
  }}finally{await media.close();}
- return out;
+ return withFailures(out,failures);
 }
 async function upload(page,rows,progress=()=>{}){
  const f=frame(page);await closeHint(f);
@@ -65,7 +100,24 @@ async function upload(page,rows,progress=()=>{}){
  if(await target.count()!==1)throw Error('上传入口不唯一，请打开批量发布上传页');
  await target.setInputFiles(rows.map(r=>r.path));
  progress('正在上传 '+rows.length+' 条视频…');
- for(const row of rows)await f.getByText(row.file,{exact:true}).waitFor({timeout:600000});
- await f.waitForFunction(n=>[...document.querySelectorAll('*')].filter(e=>e.children.length===0&&e.textContent==='已上传').length===n,rows.length,{timeout:600000});
+ const results=await Promise.all(rows.map(async row=>{
+  try{
+   await f.waitForFunction(filename=>{
+    const exact=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent.trim()===filename);
+    let node=exact;
+    for(let depth=0;node&&depth<8;depth++,node=node.parentElement){
+     if([...node.querySelectorAll('*')].some(e=>e.children.length===0&&e.textContent.trim()==='已上传'))return true;
+    }
+    return false;
+   },row.file,{timeout:600000});
+   return {row};
+  }catch(error){return {row,error};}
+ }));
+ const failed=results.filter(x=>x.error),success=results.filter(x=>!x.error).map(x=>x.row),failures=[];
+ for(const result of failed){
+  const removed=await removeVideoFromBatch(f,result.row.file);
+  failures.push({file:result.row.file,stage:'上传',error:errorMessage(result.error),removed});
+ }
+ return withFailures(success,failures);
 }
-module.exports={URL,frame,closeHint,searchProduct,productCandidates,collectProducts,fetchTopics,upload,inspectMedia};
+module.exports={URL,frame,closeHint,searchProduct,productCandidates,collectProducts,fetchTopics,upload,inspectMedia,removeVideoFromBatch};

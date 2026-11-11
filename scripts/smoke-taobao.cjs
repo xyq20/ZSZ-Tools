@@ -5,7 +5,7 @@ const {_electron}=require('playwright-core'),assert=require('node:assert/strict'
   await fs.writeFile(path.join(temp,'红海 1.mp4'),'synthetic-video-for-read-only-scan');
   electron=await _electron.launch({executablePath:process.env.TOOLKIT_SMOKE_EXECUTABLE||require('electron'),args:process.env.TOOLKIT_SMOKE_EXECUTABLE?[]:[path.join(__dirname,'..')],env:{...process.env,ELECTRON_RUN_AS_NODE:''}});
   const page=await electron.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.getByRole('button',{name:'▷　淘宝素材上传（谭）',exact:true}).click();
+  await page.locator('[data-view=taobao]').first().click();
   assert(await page.locator('#taobao').isVisible());assert(await page.locator('#taobao-prepare').isDisabled());assert(await page.locator('#taobao-publish').isDisabled());
   await page.locator('#taobao details').evaluate(e=>e.open=true);await page.locator('#taobao-settings').click();await page.locator('#taobao-config-status').filter({hasText:'模型：deepseek-flash'}).waitFor();
   await electron.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},temp);

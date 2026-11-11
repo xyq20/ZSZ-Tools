@@ -1,11 +1,41 @@
 const views=['home','report','price','monthly','taobao','sycm'];
-const labels={sycm:'生意参谋数据抓取（董卓）',home:'全部工具',report:'丹姐表格',price:'批量导入价格',monthly:'总表（双姐）',taobao:'淘宝素材上传（谭）'};
+const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表',taobao:'谭 / 淘宝素材上传',sycm:'董卓 / 生意参谋数据抓取'};
 for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{
-const name=button.dataset.view;for(const id of views)document.getElementById(id).hidden=id!==name;
-document.getElementById('crumb').textContent=labels[name];
-for(const nav of document.querySelectorAll('aside button'))nav.classList.toggle('active',nav.dataset.view===name);
+ const name=button.dataset.view;
+ for(const id of views)document.getElementById(id).hidden=id!==name;
+ document.getElementById('crumb').textContent=labels[name];
+ for(const nav of document.querySelectorAll('aside [data-view]')){
+  const active=nav.dataset.view===name;
+  nav.classList.toggle('active',active);
+  if(active)nav.setAttribute('aria-current','page');else nav.removeAttribute('aria-current');
+ }
+ window.scrollTo(0,0);
 });
-document.getElementById('search').addEventListener('input',e=>{let visible=0;for(const card of document.querySelectorAll('[data-search]')){card.hidden=!card.dataset.search.toLowerCase().includes(e.target.value.trim().toLowerCase());if(!card.hidden)visible++;}document.getElementById('empty').hidden=visible>0;});
+const search=document.getElementById('search');
+const ownerFilters=[...document.querySelectorAll('[data-owner-filter]')];
+const ownerGroups=[...document.querySelectorAll('[data-owner]')];
+let selectedOwner='all';
+function filterProjects(){
+ const query=search.value.trim().toLowerCase();
+ let visible=0;
+ for(const group of ownerGroups){
+  let groupVisible=0;
+  for(const card of group.querySelectorAll('[data-search]')){
+   card.hidden=!(selectedOwner==='all'||selectedOwner===group.dataset.owner)||!card.dataset.search.toLowerCase().includes(query);
+   if(!card.hidden)groupVisible++;
+  }
+  group.hidden=groupVisible===0;
+  group.querySelector('.owner-count').textContent=groupVisible+' 个项目';
+  visible+=groupVisible;
+ }
+ for(const button of ownerFilters)button.setAttribute('aria-pressed',String(button.dataset.ownerFilter===selectedOwner));
+ document.getElementById('empty').hidden=visible>0;
+ document.getElementById('result-count').textContent=(selectedOwner==='all'?'共 ':selectedOwner+' · ')+visible+' 个项目';
+}
+search.addEventListener('input',filterProjects);
+for(const button of ownerFilters)button.addEventListener('click',()=>{selectedOwner=button.dataset.ownerFilter;filterProjects();});
+document.getElementById('reset-filters').addEventListener('click',()=>{selectedOwner='all';search.value='';filterProjects();search.focus();});
+filterProjects();
 const checkButton=document.getElementById('check-update');
 const downloadButton=document.getElementById('download-update');
 const updateStatus=document.getElementById('update-status');
@@ -89,7 +119,11 @@ for(const action of ['settings','save-key','login','choose','prepare','publish',
  }
  if(action==='prepare'){
   taobaoReady=false;statusFor('taobao').textContent='开始准备批次…';const r=await call('taobao-prepare');
-  table('taobao-results',['视频','文案','关联商品','商品 ID','话题'],r.choices.map(x=>[x.file,x.caption,x.product_name,x.product_id,x.topic_title]));taobaoReady=r.status==='ready';return;
+  const successRows=(r.choices||[]).map(x=>['成功',x.file,x.caption,x.product_name,x.product_id,x.topic_title]);
+  const failedRows=(r.summary?.failures||[]).map(x=>['跳过',x.file,x.error||'',x.stage||'', '', '']);
+  table('taobao-results',['状态','视频','文案 / 原因','关联商品 / 阶段','商品 ID','话题'],[...successRows,...failedRows]);
+  const summary=r.summary||{success:(r.choices||[]).length,failed:failedRows.length};
+  statusFor('taobao').textContent=`处理完成：成功 ${summary.success}，跳过 ${summary.failed} 条。${r.status==='ready'?'请核对成功项后确认发布。':'没有可发布的视频。'}`;taobaoReady=r.status==='ready';return;
  }
  if(action==='publish'){
   try{const r=await call('taobao-publish');if(r){taobaoReady=false;statusFor('taobao').textContent=r.message;}}catch(e){taobaoReady=false;throw e;}return;

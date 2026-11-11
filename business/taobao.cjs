@@ -13,7 +13,7 @@ function browserPath(){
 }
 function createTaobaoTool({app,win,dialog,safeStorage,progress}){
  const dir=path.join(app.getPath('userData'),'taobao'),stateFile=path.join(dir,'history.json'),keyFile=path.join(dir,'model-key.bin');
- let context,page,batch,choices,ready=false,submitting=false,ownsDraft=false;
+ let context,page,batch,choices,activeRows,ready=false,submitting=false,ownsDraft=false;
  async function journal(){return readState(stateFile);}
  function apiKey(){if(!fs.existsSync(keyFile))return '';if(!safeStorage.isEncryptionAvailable())throw Error('本机系统加密不可用，请恢复系统钥匙串后重试');return safeStorage.decryptString(fs.readFileSync(keyFile));}
  async function settings(){return {hasKey:fs.existsSync(keyFile),model:'deepseek-flash',browser:browserPath()?path.basename(browserPath()):null};}
@@ -34,10 +34,10 @@ function createTaobaoTool({app,win,dialog,safeStorage,progress}){
  async function choose(){
   if(submitting)throw Error('发布结果尚待确认，不能切换批次');
   const r=await dialog.showOpenDialog(win,{title:'选择具体月份/周次的视频目录',properties:['openDirectory']});if(r.canceled)return null;
-  ready=false;choices=null;const state=await journal();batch=await scanFolder(r.filePaths[0],state.records);return batch;
+  ready=false;choices=null;activeRows=null;const state=await journal();batch=await scanFolder(r.filePaths[0],state.records);return batch;
  }
  async function prepare(){
-  ready=false;choices=null;
+  ready=false;choices=null;activeRows=null;
   if(!batch)throw Error('请先选择视频目录');
   if(!apiKey())throw Error('请先保存 DeepSeek API 密钥');
   const state=await journal();const refreshed=await scanFolder(batch.folder,state.records);
@@ -47,37 +47,46 @@ function createTaobaoTool({app,win,dialog,safeStorage,progress}){
   if(ownsDraft){progress('正在清理本工具上次未提交的草稿，重新准备批次…');await page.goto(URL,{waitUntil:'domcontentloaded'});}
   await waitEditor();
   progress('正在读取视频时长，用于校验活动参与要求…');const media=await inspectMedia(context,batch.rows);await page.bringToFront();
-  progress('开始上传视频');ownsDraft=true;await upload(page,batch.rows,progress);
-  const items=await collectProducts(page,media,progress);
+  const failures=[...(media.failures||[])];
+  progress('开始上传视频');ownsDraft=true;const uploaded=await upload(page,media,progress);failures.push(...(uploaded.failures||[]));
+  if(!uploaded.length){const summary={success:0,failed:failures.length,failures};progress(`准备完成：成功 0，跳过 ${failures.length} 条。`);return {status:'no_success',choices:[],summary};}
+  const items=await collectProducts(page,uploaded,progress);failures.push(...(items.failures||[]));
+  if(!items.length){const summary={success:0,failed:failures.length,failures};progress(`准备完成：成功 0，跳过 ${failures.length} 条。`);return {status:'no_success',choices:[],summary};}
   progress('正在读取当前推荐与服饰话题及活动要求…');const topics=await fetchTopics(page);
   if(!topics.length)throw Error('平台没有返回话题候选');
   const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   progress(`正在生成 ${items.length} 条文案，从 ${topics.length} 个实时话题中选择…`);
   choices=await generateChoices({items,topics,date,key:apiKey(),history:state.captions});
-  progress('正在填写商品、文案、话题、标签及声明…');await runPreparedBatch(page,choices,{publish:false});
-  ready=true;progress(`整批 ${choices.length} 条已核验，请核对清单和淘宝页面，再确认发布。`);
-  return {status:'ready',choices:choices.map(({file,caption,product_name,product_id,topic_title})=>({file,caption,product_name,product_id,topic_title}))};
+  progress('正在填写商品、文案、话题、标签及声明…');const prepared=await runPreparedBatch(page,choices,{publish:false});
+  failures.push(...(prepared.failed||[]));choices=prepared.choices||[];activeRows=batch.rows.filter(row=>choices.some(choice=>choice.file===row.file));
+  const summary={success:choices.length,failed:failures.length,failures};
+  ready=prepared.status==='ready_for_publish'&&choices.length>0;
+  progress(`准备完成：成功 ${summary.success}，跳过 ${summary.failed} 条。${ready?'请核对后确认发布。':''}`);
+  return {status:ready?'ready':prepared.status,choices:choices.map(({file,caption,product_name,product_id,topic_title})=>({file,caption,product_name,product_id,topic_title})),summary};
  }
  async function publish(){
-  if(!ready||!choices||submitting)throw Error('请先完成上传、填写和整批核验');
+  if(!ready||!choices||!activeRows?.length||submitting)throw Error('请先完成上传、填写和整批核验');
   const confirm=await dialog.showMessageBox(win,{type:'question',buttons:['取消','确认发布到淘宝'],defaultId:0,cancelId:0,message:`确认将 ${choices.length} 条视频发布到当前淘宝店铺？`,detail:'请核对淘宝窗口中的店铺账号、视频内容、商品关联、文案与话题。发布后不能通过工具箱撤回。'});
   if(confirm.response!==1)return null;
   const state=await journal();const current=await scanFolder(batch.folder,state.records);assertRunnable(current.rows);
-  if(JSON.stringify(current.rows.map(x=>[x.file,x.fingerprint]))!==JSON.stringify(batch.rows.map(x=>[x.file,x.fingerprint])))throw Error('发布前视频文件发生变化，请重新选择并核验');
-  await finalizeBatch(page,choices,{publish:false});
+  const currentActive=current.rows.filter(row=>activeRows.some(active=>active.file===row.file));
+  if(JSON.stringify(currentActive.map(x=>[x.file,x.fingerprint]))!==JSON.stringify(activeRows.map(x=>[x.file,x.fingerprint])))throw Error('发布前视频文件发生变化，请重新选择并核验');
+  const verification=await finalizeBatch(page,choices,{publish:false});
+  choices=verification.choices||[];activeRows=activeRows.filter(row=>choices.some(choice=>choice.file===row.file));
+  if(verification.status!=='ready_for_publish'||!choices.length){ready=false;return {status:verification.status,message:`发布前核验完成：成功 ${choices.length}，跳过 ${(verification.failed||[]).length} 条。`,summary:{success:choices.length,failed:(verification.failed||[]).length,failures:verification.failed||[]}};}
   await armPublicationResult(page);
   // Persist before click. A crash or timeout must never unlock a potentially published batch.
-  for(const row of batch.rows)state.records[row.fingerprint]={file:row.file,status:'submitted',at:new Date().toISOString()};
+  for(const row of activeRows)state.records[row.fingerprint]={file:row.file,status:'submitted',at:new Date().toISOString()};
   await writeState(stateFile,state);ready=false;submitting=true;
   try{
    progress('正在提交整批视频，等待淘宝返回结果；请保持浏览器打开…');
    await finalizeBatch(page,choices,{publish:true});
    const result=await waitPublicationResult(page,choices);
-   for(const row of batch.rows)state.records[row.fingerprint].status=result.status;
+   for(const row of activeRows)state.records[row.fingerprint].status=result.status;
    if(result.status==='published')state.captions.push(...choices.map(c=>c.caption));
    await writeState(stateFile,state);progress(result.message);return result;
   }catch(error){
-   for(const row of batch.rows)state.records[row.fingerprint].status='unknown';await writeState(stateFile,state);
+   for(const row of activeRows)state.records[row.fingerprint].status='unknown';await writeState(stateFile,state);
    throw Error('发布结果待核实，已锁定本批次，请到淘宝作品管理检查。'+error.message);
   }finally{submitting=false;}
  }
