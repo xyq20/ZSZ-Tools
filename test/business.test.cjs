@@ -38,13 +38,76 @@ test('a workbook with no blank price cells makes no requests',async()=>{
 test('catalog pagination incomplete is rejected',async()=>{await assert.rejects(queryPrices({rows:[{code:'a'}]},async()=>({data:{total:1,records:[]}}),()=>{}),/分页不完整/);});
 test('month boundaries use China time and support year rollover',()=>{const m=months('2025-12','2026-01');assert.equal(m.length,2);assert.equal(new Date(m[0].startTime).toISOString(),'2025-11-30T16:00:00.000Z');assert.equal(new Date(m[0].endTime).toISOString(),'2025-12-31T15:59:59.000Z');assert.throws(()=>months('2026-02','2026-01'));});
 test('report validates totals and confirms missing stores before export',async()=>{
- const cfg=require('../modules/report/report-config.json');let zeroChecks=0;const row={user_id:String(cfg.shops[0].id),order_pay_amount:'10.01',snapshot_refund_money:'2.00'};
- const request=async(url,b)=>{if(url.endsWith('sniff'))return {suc:true,data:{}};if(url.endsWith('page'))return {suc:true,data:{list:[row],page:{hasNext:false}}};if(b.userIdList.includes(','))return {suc:true,data:{total:1,amount:{order_pay_amount:'10.01',snapshot_refund_money:'2'}}};zeroChecks++;return {suc:true,data:{total:'0'}};};
- const result=await queryReport('2026-01','2026-01',request,()=>{},{intervalMs:0,endpointIntervalMs:0});assert.equal(zeroChecks,13);assert.equal(result.rows.length,14);assert.equal(result.monthly[0].order_pay_amount,'10.01');assert.deepEqual(result.totals,{order_pay_amount:'10.01',snapshot_refund_money:'2.00'});const f=path.join(await fs.mkdtemp(path.join(os.tmpdir(),'report-test-')),'报告.xlsx');await exportReport(result,f);assert((await fs.stat(f)).size>1000);
+ const cfg=require('../modules/report/report-config.json');let zeroChecks=0;const row={user_id:String(cfg.shops[0].id),order_pay_amount:'10.01',snapshot_refund_money:'2.00'};const refundRows=cfg.shops.map((shop,index)=>({work_order_id:`w-${index}`,user_id:String(shop.id),trade_pay_time:'2026-01-15 12:00:00',snapshot_refund_money:'2.00'}));
+ const request=async(url,b)=>{if(url.endsWith('/sale/finance/page'))return {suc:true,result:1,data:{list:[row],page:{hasNext:false}}};if(url.endsWith('/sale/finance/summary')){if(b.userIdList.includes(','))return {suc:true,result:1,data:{total:1,amount:{order_pay_amount:'10.01'}}};zeroChecks++;return {suc:true,result:1,data:{total:'0'}};}if(url.endsWith('/aftersale/summary')){assert.equal(b.workOrderTimeQueryType,'after_sale_platform_finish');assert.equal(b.pageId,'100745');return {suc:true,result:1,data:{total:'14',amount:{snapshot_refund_money:'28.00'}}};}if(url.endsWith('/aftersale/page'))return {suc:true,result:1,data:{list:refundRows,page:{hasNext:false}}};throw Error(`unexpected URL: ${url}`);};
+ const result=await queryReport('2026-01','2026-01',request,()=>{},{intervalMs:0,endpointIntervalMs:0,refundEndTime:1769875199000});assert.equal(zeroChecks,13);assert.equal(result.rows.length,14);assert.equal(result.monthly[0].order_pay_amount,'10.01');assert.deepEqual(result.totals,{order_pay_amount:'10.01',snapshot_refund_money:'28.00'});const f=path.join(await fs.mkdtemp(path.join(os.tmpdir(),'report-test-')),'报告.xlsx');await exportReport(result,f);assert((await fs.stat(f)).size>1000);
  const wb=new ExcelJS.Workbook();await wb.xlsx.readFile(f);assert.equal(wb.worksheets[0].getCell('C6').value.result,10.01);for(const sheet of wb.worksheets){assert.equal(sheet.pageSetup.horizontalCentered,true);sheet.eachRow(row=>row.eachCell(cell=>{assert.equal(cell.alignment.horizontal,'center');assert.equal(cell.alignment.vertical,'middle');}));}
- await assert.rejects(queryReport('2026-01','2026-01',async(url,b)=>{const r=await request(url,b);if(url.endsWith('summary')&&b.userIdList.includes(','))r.data.amount.order_pay_amount='11';return r;},()=>{},{intervalMs:0,endpointIntervalMs:0}),/不一致/);
+ const invalidFile=path.join(await fs.mkdtemp(path.join(os.tmpdir(),'report-invalid-')),'报告.xlsx');await assert.rejects(exportReport({...result,rows:result.rows.slice(1)},invalidFile),/店铺明细数量/);
+ await assert.rejects(queryReport('2026-01','2026-01',async(url,b)=>{const r=await request(url,b);if(url.endsWith('/sale/finance/summary')&&b.userIdList.includes(','))r.data.amount.order_pay_amount='11';return r;},()=>{},{intervalMs:0,endpointIntervalMs:0}),/不一致/);
 });
 test('report totals retain exact cents across months',()=>{
  assert.deepEqual(reportTotals([{order_pay_amount:'0.10',snapshot_refund_money:'0.01'},{order_pay_amount:'0.20',snapshot_refund_money:'0.02'},{order_pay_amount:'12345678.99',snapshot_refund_money:'5.10'}]),{order_pay_amount:'12345679.29',snapshot_refund_money:'5.13'});
  assert.throws(()=>reportTotals([{order_pay_amount:null,snapshot_refund_money:'0'}]),/金额缺失/);
+});
+test('report rejects an API response whose result flag is unsuccessful',async()=>{
+ const request=async()=>({suc:true,result:0,message:'接口失败'});
+ await assert.rejects(queryReport('2026-01','2026-01',request,()=>{},{intervalMs:0,endpointIntervalMs:0}),/接口失败/);
+});
+test('refund detail rejects unknown shops and invalid pages and reports missing payment times',async()=>{
+ const cfg=require('../modules/report/report-config.json');
+ const financeRows=cfg.shops.map(shop=>({user_id:String(shop.id),order_pay_amount:'0.00'}));
+ const makeRequest=(refundRows,page)=>async(url,b)=>{
+  if(url.endsWith('/aftersale/summary'))return {suc:true,result:1,data:{total:String(refundRows.length),amount:{snapshot_refund_money:refundRows.reduce((sum,row)=>sum+Number(row.snapshot_refund_money),0).toFixed(2)}}};
+  if(url.endsWith('/aftersale/page'))return {suc:true,result:1,data:{list:refundRows,page}};
+  if(url.endsWith('/sale/finance/page'))return {suc:true,result:1,data:{list:financeRows,page:{hasNext:false}}};
+  if(url.endsWith('/sale/finance/summary'))return {suc:true,result:1,data:{total:'14',amount:{order_pay_amount:'0.00'}}};
+  throw Error(`unexpected URL: ${url}`);
+ };
+ const options={intervalMs:0,endpointIntervalMs:0,refundEndTime:1769875199000};
+ await assert.rejects(queryReport('2026-01','2026-01',makeRequest([{work_order_id:'unknown',user_id:'999',trade_pay_time:'2026-01-15 00:00:00',snapshot_refund_money:'1.00'}],{hasNext:false}),()=>{},options),/未知店铺/);
+ const missing=await queryReport('2026-01','2026-01',makeRequest([{work_order_id:'missing-time',user_id:String(cfg.shops[0].id),trade_pay_time:'',snapshot_refund_money:'1.00'}],{hasNext:false}),()=>{},options);
+ assert.equal(missing.unassignedRefundAmount,'1.00');
+ assert.equal(missing.unassignedRefunds[0].workOrderId,'missing-time');
+ await assert.rejects(queryReport('2026-01','2026-01',makeRequest([],{}),()=>{},options),/分页格式无效/);
+});
+
+test('payment dates reject impossible dates and retain cross-month refunds across pages', async () => {
+  const cfg = require('../modules/report/report-config.json');
+  const shopId = String(cfg.shops[0].id);
+  const options = { intervalMs: 0, endpointIntervalMs: 0 };
+  const makeRequest = paymentTime => async (url, body) => {
+    if (url.endsWith('/aftersale/summary')) return { suc: true, result: 1, data: { total: 2, amount: { snapshot_refund_money: '3.00' } } };
+    if (url.endsWith('/aftersale/page')) {
+      assert.equal(body.pageSize, 500);
+      const first = body.pageNo === 1;
+      return { suc: true, result: 1, data: {
+        list: [{ work_order_id: String(body.pageNo), user_id: shopId,
+          trade_pay_time: first ? paymentTime : '2025-12-31 23:59:59',
+          work_end_time: '2026-03-01 00:00:00', snapshot_refund_money: first ? '1.00' : '2.00' }],
+        page: { hasNext: first },
+      } };
+    }
+    if (url.endsWith('/sale/finance/page')) return { suc: true, result: 1, data: {
+      list: cfg.shops.map(shop => ({ user_id: String(shop.id), order_pay_amount: '0.00' })), page: { hasNext: false },
+    } };
+    return { suc: true, result: 1, data: { total: 14, amount: { order_pay_amount: '0.00' } } };
+  };
+  for (const value of ['2026-13-01 00:00:00', '2026-02-30 00:00:00', '2026-01-15 25:00:00', '2026-01-invalid']) {
+    const unresolved = await queryReport('2026-01', '2026-01', makeRequest(value), () => {}, options);
+    assert.equal(unresolved.unassignedRefundAmount, '1.00');
+    assert.equal(unresolved.totals.snapshot_refund_money, '0.00');
+    const pendingFile = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'pending-refund-')), 'pending.xlsx');
+    await exportReport(unresolved, pendingFile);
+    const saved = new ExcelJS.Workbook();
+    await saved.xlsx.readFile(pendingFile);
+    assert.equal(saved.getWorksheet('待核对退款').getCell('D2').value, 1);
+    assert.match(saved.getWorksheet('月度汇总').getCell('A10').value, /待核对/);
+  }
+  const result = await queryReport('2026-01', '2026-01', makeRequest('2026-01-15 00:00:00'), () => {}, options);
+  assert.equal(result.totals.snapshot_refund_money, '1.00');
+  const file = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'report-amount-')), 'report.xlsx');
+  const badRows = result.rows.map((row, index) => index === 0 ? { ...row, snapshot_refund_money: '9.00' } : row);
+  await assert.rejects(exportReport({ ...result, rows: badRows }, file), /明细金额与月度汇总不一致/);
+  await assert.rejects(fs.access(file));
+  await exportReport(result, file);
 });

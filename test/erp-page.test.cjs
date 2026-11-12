@@ -22,3 +22,35 @@ test('minimized login returns to main and an existing minimized window can be re
  calls.length=0;restoreWindow(main);assert.deepEqual(calls,['restore','show','focus']);
  restoreWindow({isDestroyed:()=>true});
 });
+
+test('report query reaches after-sale and finance endpoints through the desktop bridge', async () => {
+ const {queryReport}=require('../business/reports.cjs');
+ const config=require('../modules/report/report-config.json');
+ const calls=[];
+ const win={isDestroyed:()=>false,webContents:{isLoading:()=>false,getURL:()=> 'https://erpa.superboss.cc/index.html',executeJavaScript:expression=>vm.runInNewContext(expression,{
+  location:{origin:'https://erpa.superboss.cc'},AbortSignal,
+  fetch:async(route,options)=>{
+   calls.push(route);
+   const body=JSON.parse(options.body);
+   assert.equal(options.credentials,'include');
+   let data;
+   if(route.includes('/aftersale/')) {
+    assert.equal(options.headers.CompanyId,'111873');
+    assert.equal(options.headers['Module-Path'],'/report/dynamic/?reportId=67953');
+    assert.equal(body.pageId,'100745');
+    assert.equal(body.workOrderTimeQueryType,'after_sale_platform_finish');
+    assert.equal(body.userIdList,config.shops.map(shop=>shop.id).join(','));
+    data=route.endsWith('/summary')?{total:1,amount:{snapshot_refund_money:'2.00'}}:{list:[{work_order_id:'test',user_id:String(config.shops[0].id),trade_pay_time:'2026-01-10 12:00:00',snapshot_refund_money:'2.00'}],page:{hasNext:false}};
+   } else {
+    data=route.endsWith('/summary')?{total:14,amount:{order_pay_amount:'14.00'}}:{list:config.shops.map(shop=>({user_id:String(shop.id),order_pay_amount:'1.00'})),page:{hasNext:false}};
+   }
+   return {ok:true,status:200,headers:{get:()=>null},json:async()=>({suc:true,result:1,data})};
+  }
+ })}};
+ const result=await queryReport('2026-01','2026-01',(route,body)=>requestInErpPage(win,route,body),()=>{},{intervalMs:0,endpointIntervalMs:0});
+ assert.equal(result.totals.snapshot_refund_money,'2.00');
+ assert.equal(calls.length,4);
+ for(const route of ['/kmrp/statistics/history/aftersale/delete','/kmrp/statistics/history/aftersale/page?x=1','https://elsewhere.test/kmrp/statistics/history/aftersale/page']) {
+  await assert.rejects(requestInErpPage(win,route,{}),/不支持/);
+ }
+});

@@ -73,7 +73,13 @@ document.getElementById('price-query').addEventListener('click',()=>run('price',
 document.getElementById('price-save').addEventListener('click',()=>run('price',async()=>{const r=await call('price-save');if(r){hasPrices=false;hasFillablePrices=false;statusFor('price').textContent=`已填入 ${r.count} 行空白价格并回读验证。备份：${r.backup}`;document.getElementById('price-results').replaceChildren();}}));
 for(const tool of ['price','report'])document.getElementById(tool+'-export').addEventListener('click',()=>run(tool,async()=>{const file=await call(tool+'-export');if(file)statusFor(tool).textContent='已导出：'+file;}));
 const now=new Date(),month=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;document.getElementById('start').value=now.getFullYear()+'-01';document.getElementById('end').value=month;
-document.getElementById('report-query').addEventListener('click',()=>run('report',async()=>{hasReport=false;document.getElementById('report-results').replaceChildren();statusFor('report').textContent='开始查询…';const r=await call('report-query',document.getElementById('start').value,document.getElementById('end').value);hasReport=true;table('report-results',['月份','订单买家已付金额','退款金额'],r.monthly.map(x=>[x.month,x.order_pay_amount,x.snapshot_refund_money]),['合计',r.totals.order_pay_amount,r.totals.snapshot_refund_money]);statusFor('report').textContent=`${r.shops} 家店铺、${r.monthly.length} 个月，金额核对通过。查询时间：${new Date(r.queriedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})}`;}));
+document.getElementById('report-query').addEventListener('click',()=>run('report',async()=>{hasReport=false;document.getElementById('report-results').replaceChildren();statusFor('report').textContent='开始查询…';const r=await call('report-query',document.getElementById('start').value,document.getElementById('end').value);hasReport=true;table('report-results',['月份','订单买家已付金额','退款金额'],r.monthly.map(x=>[x.month,x.order_pay_amount,x.snapshot_refund_money]),['合计',r.totals.order_pay_amount,r.totals.snapshot_refund_money]);if (r.unassignedRefunds?.length) {
+ const warning = document.createElement('p');
+ warning.textContent = `待核对：${r.unassignedRefunds.length} 笔退款合计 ${r.unassignedRefundAmount} 元缺少有效付款时间，尚未计入月度汇总。导出表格包含待核对工单明细。`;
+ warning.style.color = '#b45309';
+ document.getElementById('report-results').prepend(warning);
+}
+statusFor('report').textContent=`${r.shops} 家店铺、${r.monthly.length} 个月，${r.unassignedRefunds?.length ? '采集完成，存在待核对退款' : '金额核对通过'}。查询时间：${new Date(r.queriedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})}`;}));
 refreshActions();
 
 const monthlyDate=document.getElementById('monthly-date');

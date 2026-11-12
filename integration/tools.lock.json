@@ -3,12 +3,12 @@
   "tools": {
     "report": {
       "source": "../4.丹姐表格",
-      "commit": "5216b730ba29b49c3bbd892b9c2d2a2ec4ea8abd",
+      "commit": "f2ab89bc42d8bad406715e6a3481228d699b6804",
       "dirty": false,
       "files": {
         "reports.cjs": {
           "target": "modules/report/reports.cjs",
-          "sha256": "8221705ad373d920fecc720678d84197adef7ba7cd962737f394c970ec96071a"
+          "sha256": "67738381d90e12a82be2af0c9d8fe07f4558c273c71742130d8191271889dd8f"
         },
         "report-config.json": {
           "target": "modules/report/report-config.json",
@@ -16,7 +16,7 @@
         },
         "report-speed.js": {
           "target": "modules/report/report-speed.js",
-          "sha256": "052bc826428538d0c07db2f4ec7227ce4f23ed66adc29ace9a70e90d0eaeda89"
+          "sha256": "00e2905012345190b92fbd5b3d9118d7951062040bc02be54ec7c74781131001"
         },
         "workbook-style.cjs": {
           "target": "modules/report/workbook-style.cjs",

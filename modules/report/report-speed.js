@@ -10,7 +10,7 @@
   let queue=Promise.resolve(),lastStart=-Infinity,cooldownUntil=0;const lastEndpoint=new Map();
   const slot=key=>{const next=queue.then(async()=>{for(;;){const wait=Math.max(lastStart+intervalMs,(lastEndpoint.get(key)??-Infinity)+endpointIntervalMs,cooldownUntil)-Date.now();if(wait<=0)break;await sleep(wait);}lastStart=Date.now();lastEndpoint.set(key,lastStart);});queue=next.catch(()=>{});return next;};
   return async(...args)=>{for(let attempt=0;;attempt++){
-   await slot(args[0]);try{const result=await raw(...args);const message=String(result?.message||result?.msg||result?.errorMsg||'');if(result?.result!==1&&result?.suc!==true&&/频繁|限流|too many requests|rate limit/i.test(message))throw Object.assign(Error(message),{status:429});return result;}
+   await slot(args[0]);try{const result=await raw(...args);const message=String(result?.message||result?.msg||result?.errorMsg||'');if(result?.result!==1||result?.suc!==true){if(/频繁|限流|too many requests|rate limit/i.test(message))throw Object.assign(Error(message),{status:429});throw Error(message||'请求失败');}return result;}
    catch(error){if(attempt>=retries||!(error.status===429||/频繁|限流|too many requests|rate limit/i.test(error.message)))throw error;
     const wait=Math.max(backoffMs*2**attempt,Number(error.retryAfterMs)||0);cooldownUntil=Math.max(cooldownUntil,Date.now()+wait);onRetry(wait,attempt+1);
    }

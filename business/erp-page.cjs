@@ -19,15 +19,18 @@ async function waitForPage(win){
 }
 async function requestInErpPage(win,route,body){
  const form=route==='/report/sale/dimensions/list';
- if(!form&&!/^\/kmrp\/statistics\/history\/sale\/finance\/(sniff|page|summary)$/.test(route))throw Error('不支持的报表接口');
+ const afterSale=/^\/kmrp\/statistics\/history\/aftersale\/(page|summary)$/.test(route);
+ if(!form&&!afterSale&&!/^\/kmrp\/statistics\/history\/sale\/finance\/(sniff|page|summary)$/.test(route))throw Error('不支持的报表接口');
  await waitForPage(win);
  // Use the ERP page's own fetch and session, matching the original desktop script.
  // Remote content never receives a preload, Node access, or desktop IPC.
- const input=JSON.stringify({route,form,body:form?new URLSearchParams(body).toString():JSON.stringify(body)});
+ const input=JSON.stringify({route,form,afterSale,body:form?new URLSearchParams(body).toString():JSON.stringify(body)});
  const result=await win.webContents.executeJavaScript(`(async()=>{
   if(!/^https:\\/\\/(?:erp[a-z]?|viperp)\\.superboss\\.cc$/.test(location.origin))throw Error('请先完成快麦 ERP 登录');
   const input=${input};
-  const response=await fetch(input.route,{method:'POST',credentials:'include',headers:input.form?{Accept:'application/json, text/plain, */*','Content-Type':'application/x-www-form-urlencoded',Companyid:'111873','Module-Path':'/report/sale_multidimension_next/',Trackid:'trackid'+Date.now()+'_toolkit'}:{'Content-Type':'application/json;charset=UTF-8'},body:input.body,signal:AbortSignal.timeout(input.form?120000:45000)});
+  const headers=input.form?{Accept:'application/json, text/plain, */*','Content-Type':'application/x-www-form-urlencoded',Companyid:'111873','Module-Path':'/report/sale_multidimension_next/',Trackid:'trackid'+Date.now()+'_toolkit'}:{'Content-Type':'application/json;charset=UTF-8'};
+  if(input.afterSale){headers.CompanyId='111873';headers['Module-Path']='/report/dynamic/?reportId=67953';}
+  const response=await fetch(input.route,{method:'POST',credentials:'include',headers,body:input.body,signal:AbortSignal.timeout(input.form?120000:45000)});
   let payload;try{payload=await response.json();}catch{throw Error('未返回有效数据，请先登录快麦 ERP');}
   return {ok:response.ok,status:response.status,retryAfterMs:Number(response.headers.get('Retry-After')||0)*1000,payload};
  })()`,true);
