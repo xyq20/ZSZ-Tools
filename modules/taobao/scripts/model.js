@@ -29,9 +29,12 @@ async function generateChoices({items,topics,date,key,history=[],fetchImpl=fetch
   const item=items.find(i=>i.file===c.file),topic=eligible.find(t=>String(t.id)===String(c.topic_id)&&t.title===c.topic_title);
   if(!item||String(item.product_id)!==String(c.product_id)||!topic||!topicFits(topic,item,date))throw Error('模型返回了候选以外的商品或话题');
   c.product_name=item.product_name;c.query=item.query;
+  // Product associations come from the matched platform results, not model output.
+  c.products=structuredClone(item.products||[{id:String(item.product_id),title:item.product_name}]);
  }
  if(choices.some(c=>history.includes(c.caption)))throw Error('文案与近期历史重复，请重试');
  if(new Set(choices.map(c=>c.caption)).size!==choices.length)throw Error('模型生成了重复文案，请重试');
+ validateChoices(choices);
  return items.map(i=>choices.find(c=>c.file===i.file));
 }
 module.exports={generateChoices,validTopic,topicFits};

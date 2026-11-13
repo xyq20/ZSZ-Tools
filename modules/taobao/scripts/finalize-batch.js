@@ -28,12 +28,18 @@ async function finalizeBatch(page, choices, { publish = false } = {}) {
       const chipCount = await f.locator('.rich-text-content [data-cangjie-void=true]').count();
       const body = await f.locator('#root').innerText();
       const productName = item.product_name || productNameFromFile(item.file);
-      if (!caption || [...caption].length > 30 || chipCount !== 4 ||
-          tags !== '好物讲解精选好物商品展示时尚穿搭' ||
-          !await f.getByRole('radio', { name: '内容无需标注', exact: true }).isChecked() ||
-          !body.includes(item.topic_title) || !body.includes('1/6') ||
-          !body.includes(productName))
-        throw new Error('视频填写核验失败：' + item.file);
+      const products=item.products||[{id:item.product_id,title:productName}];
+      // The editor renders thumbnails without titles when several products are linked.
+      const savedProductIds=await f.locator('[class*="publish-content__item-v2--list-item"][data-id]').evaluateAll(elements=>elements.map(element=>element.getAttribute('data-id')));
+      const problems=[];
+      if(caption!==item.caption||[...caption].length>30)problems.push('描述不一致');
+      if(chipCount!==4||tags!=='好物讲解精选好物商品展示时尚穿搭')problems.push('内容标签不完整');
+      if(!await f.getByRole('radio',{name:'内容无需标注',exact:true}).isChecked())problems.push('声明未选中');
+      if(!body.includes(item.topic_title))problems.push('话题未回读到');
+      if(!body.replace(/\s/g,'').includes(products.length+'/6'))problems.push('商品数量未回读到 '+products.length+'/6');
+      const expectedIds=products.map(product=>String(product.id)).sort();
+      if(JSON.stringify([...savedProductIds].sort())!==JSON.stringify(expectedIds))problems.push('关联商品 ID 不一致，预期 '+expectedIds.join('、')+'，实际 '+savedProductIds.join('、'));
+      if(problems.length)throw Error('视频填写核验失败：'+item.file+'；'+problems.join('；'));
       verified.push(item.file);
     } catch (error) {
       const removed=await removeVideoFromBatch(f,item.file);

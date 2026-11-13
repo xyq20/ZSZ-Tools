@@ -13,3 +13,9 @@ test('valid choices and thirty Unicode characters are accepted',()=>{
  assert.equal(validateChoices([item]).length,1);
  assert.equal(validateChoices([{...item,caption:'🧶'.repeat(30)}]).length,1);
 });
+
+test('multi-product lists reject duplicates, malformed IDs and platform overflow',()=>{
+ const products=[{id:'123',title:'商品一'},{id:'456',title:'商品二'}];
+ assert.equal(validateChoices([{...item,products}]).length,1);
+ for(const invalid of [[products[0],products[0]],[{id:'123\"',title:'商品'}],[],Array.from({length:7},(_,i)=>({id:String(123+i),title:'商品'}))])assert.throws(()=>validateChoices([{...item,products:invalid}]));
+});

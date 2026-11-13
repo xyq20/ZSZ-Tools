@@ -5,9 +5,36 @@ const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('n
 // this rule in one place so matching and final verification cannot diverge.
 function productNameFromFile(file){
  const stem=path.basename(String(file)).replace(/\.[^.]+$/,'').trim();
+ const numberedRemark=stem.match(/^(.+?)\s+\d+\s+\S.*$/u);
+ if(numberedRemark)return numberedRemark[1].trim();
+ if(/\d+\.\d+$/.test(stem))return stem;
  return stem.replace(/(?:\s+|[_-])?\d+$/,'').trim() || stem;
 }
 function productQuery(file){return productNameFromFile(file);}
+function productSearchQueries(file){
+ const query=productQuery(file);
+ const withoutCategory=query.replace(/(?:夹克|皮带)$/u,'');
+ return [...new Set([query,withoutCategory].filter(Boolean))];
+}
+function matchProducts(candidates,query){
+ const normalize=value=>String(value||'').normalize('NFKC').replace(/\s+/gu,'');
+ const expected=normalize(query);
+ if(!expected)return [];
+ const unique=new Map();
+ for(const candidate of candidates){
+  if(!/^\d+$/.test(String(candidate.id||'')))continue;
+  const title=normalize(candidate.title);
+  const aliases=[...title.matchAll(/[【\[]([^【】\[\]]+)[】\]]/gu)].map(match=>match[1]);
+  const exact=title===expected||aliases.includes(expected);
+  const withCategory=aliases.some(alias=>{
+   if(!expected.startsWith(alias))return false;
+   const category=expected.slice(alias.length);
+   return ['夹克','皮带'].includes(category)&&title.includes(category);
+  });
+  if(exact||withCategory)unique.set(String(candidate.id),candidate);
+ }
+ return [...unique.values()];
+}
 async function scanFolder(folder,history={}){
  const rows=[];let skipped=0;
  for(const e of (await fs.readdir(folder,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'))){
@@ -24,4 +51,4 @@ async function scanFolder(folder,history={}){
  if(new Set(rows.map(x=>x.fingerprint)).size!==rows.length)throw Error('目录包含内容相同的视频，请先去重');
  return {folder,rows,skipped};
 }
-module.exports={scanFolder,productQuery,productNameFromFile};
+module.exports={scanFolder,productQuery,productNameFromFile,productSearchQueries,matchProducts};

@@ -125,7 +125,7 @@ for(const action of ['settings','save-key','login','choose','prepare','publish',
  }
  if(action==='prepare'){
   taobaoReady=false;statusFor('taobao').textContent='开始准备批次…';const r=await call('taobao-prepare');
-  const successRows=(r.choices||[]).map(x=>['成功',x.file,x.caption,x.product_name,x.product_id,x.topic_title]);
+  const successRows=(r.choices||[]).map(x=>['成功',x.file,x.caption,x.products?.map(p=>p.title).join('\n')||x.product_name,x.products?.map(p=>p.id).join('、')||x.product_id,x.topic_title]);
   const failedRows=(r.summary?.failures||[]).map(x=>['跳过',x.file,x.error||'',x.stage||'', '', '']);
   table('taobao-results',['状态','视频','文案 / 原因','关联商品 / 阶段','商品 ID','话题'],[...successRows,...failedRows]);
   const summary=r.summary||{success:(r.choices||[]).length,failed:failedRows.length};

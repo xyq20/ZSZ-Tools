@@ -41,3 +41,22 @@ test('activity minimum video duration is enforced before filling',()=>{
  const topic={activities:[{begin:'2026-09-01 00:00:00',end:'2026-11-30 23:59:59',detail:'基础投稿要求： 视频≥10s'}]};
  assert(!topicFits(topic,{duration:9.9},'2026-10-30'));assert(!topicFits(topic,{},'2026-10-30'));assert(topicFits(topic,{duration:10},'2026-10-30'));
 });
+
+test('real filenames preserve versions and strip separated sequence and author notes',()=>{
+ const {productSearchQueries,matchProducts}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'catalog');
+ for(const [file,expected] of [['弹壳 2 亿棠.mp4','弹壳'],['地下拳手夹克 4 亿棠.mp4','地下拳手夹克'],['四驱 1 某某.mp4','四驱'],['劳动节4.0皮带.mp4','劳动节4.0皮带'],['劳动节4.0.mp4','劳动节4.0'],['xx1xx.mp4','xx1xx']])assert.equal(productQuery(file),expected);
+ assert.deepEqual(productSearchQueries('地下拳手夹克 5 亿棠.mp4'),['地下拳手夹克','地下拳手']);
+ const candidates=[{id:'123',title:'【劳动节4.0】NEIGBORL 牛皮皮带'},{id:'456',title:'【劳动节3.0】NEIGBORL 牛皮皮带'}];
+ assert.deepEqual(matchProducts(candidates,'劳动节4.0皮带'),[candidates[0]]);
+ assert.deepEqual(matchProducts([candidates[0],candidates[0]],'劳动节4.0皮带'),[candidates[0]]);
+ assert.equal(matchProducts([...candidates,{...candidates[0],id:'789'}],'劳动节4.0皮带').length,2);
+ assert.deepEqual(matchProducts([{id:'123',title:'【地下拳手】短裤'}],'地下拳手夹克'),[]);
+ assert.deepEqual(matchProducts([{id:'123',title:'【地下拳手】皮夹克'}],'地下拳手夹克').map(c=>c.id),['123']);
+});
+
+test('all matched products survive model generation and cannot be replaced by model associations',async()=>{
+ const products=[{id:'123',title:'【地下拳手】夹克一'},{id:'456',title:'【地下拳手】夹克二'},{id:'789',title:'【地下拳手】夹克三'}];
+ const choice={file:'地下拳手 4 亿棠.mp4',caption:'日常夹克穿搭',product_id:'123',topic_id:'9',topic_title:'穿搭',products:[{id:'123',title:'错误标题'}]};
+ const result=await generateChoices({items:[{file:choice.file,product_id:'123',product_name:products[0].title,products}],topics:[{id:'9',title:'穿搭'}],date:'2026-11-13',key:'fixture',fetchImpl:async()=>({ok:true,json:async()=>({choices:[{message:{content:JSON.stringify([choice])}}]})})});
+ assert.deepEqual(result[0].products,products);
+});

@@ -12,6 +12,13 @@ function validateChoices(choices) {
     if (!/^\d+$/.test(String(item.product_id || '')) ||
         typeof item.topic_title !== 'string' || !item.topic_title.trim())
       throw new Error('缺少有效商品 ID 或话题：' + item.file);
+    if (item.products !== undefined) {
+      if (!Array.isArray(item.products) || !item.products.length || item.products.length > 6 ||
+          item.products.some(p => !p || !/^\d+$/.test(String(p.id || '')) || typeof p.title !== 'string' || !p.title.trim()) ||
+          new Set(item.products.map(p => String(p.id))).size !== item.products.length ||
+          String(item.products[0].id) !== String(item.product_id))
+        throw new Error('关联商品清单无效或超过淘宝每条 6 个商品的限制：' + item.file);
+    }
   }
   return choices;
 }

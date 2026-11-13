@@ -1,5 +1,6 @@
 const fs=require('node:fs'),fsp=require('node:fs/promises'),path=require('node:path');
 const {chromium}=require('playwright-core');
+const {createTaobaoLoginState}=require('./taobao-login-state.cjs');
 const {scanFolder}=require('../modules/taobao/scripts/catalog');
 const {generateChoices}=require('../modules/taobao/scripts/model');
 const {readState,writeState,assertRunnable}=require('../modules/taobao/scripts/state');
@@ -13,7 +14,7 @@ function browserPath(){
 }
 function createTaobaoTool({app,win,dialog,safeStorage,progress}){
  const dir=path.join(app.getPath('userData'),'taobao'),stateFile=path.join(dir,'history.json'),keyFile=path.join(dir,'model-key.bin');
- let context,page,batch,choices,activeRows,ready=false,submitting=false,ownsDraft=false;
+ let context,page,loginState,batch,choices,activeRows,ready=false,submitting=false,ownsDraft=false;
  async function journal(){return readState(stateFile);}
  function apiKey(){if(!fs.existsSync(keyFile))return '';if(!safeStorage.isEncryptionAvailable())throw Error('本机系统加密不可用，请恢复系统钥匙串后重试');return safeStorage.decryptString(fs.readFileSync(keyFile));}
  async function settings(){return {hasKey:fs.existsSync(keyFile),model:'deepseek-flash',browser:browserPath()?path.basename(browserPath()):null};}
@@ -23,8 +24,23 @@ function createTaobaoTool({app,win,dialog,safeStorage,progress}){
   const executablePath=browserPath();if(!executablePath)throw Error('请先安装 Google Chrome 或 Microsoft Edge，再打开淘宝登录');
   context=await chromium.launchPersistentContext(path.join(dir,'browser-profile'),{executablePath,headless:false,viewport:null,locale:'zh-CN',acceptDownloads:false});
   context.setDefaultTimeout(20000);page=context.pages()[0]||await context.newPage();
-  context.on('close',()=>{context=null;page=null;ready=false;});
-  await page.goto(URL,{waitUntil:'domcontentloaded'});return {message:'请在浏览器登录淘宝，并保持批量发布页面打开。'};
+  const openedContext=context;
+  const savedLogin=createTaobaoLoginState({context:openedContext,file:path.join(dir,'session-cookies.bin'),encryption:safeStorage,onError:progress});
+  loginState=savedLogin;
+  await savedLogin.restore();
+  savedLogin.start();
+  context.on('close',()=>{savedLogin.stop();if(context===openedContext){context=null;page=null;loginState=null;ready=false;}});
+  await page.goto(URL,{waitUntil:'domcontentloaded'});
+  try {
+   await waitEditor();
+   return {message:'淘宝批量发布页已就绪，请选择视频目录。'};
+  } catch {
+   const loginPage=page.frames().some(frame=>{
+    try {const url=new global.URL(frame.url());return /(^|\.)(login|havanalogin)\.taobao\.com$/.test(url.hostname);}
+    catch {return false;}
+   });
+   return {message:loginPage?'淘宝当前显示登录页，请完成登录后再继续。':'淘宝页面已打开，尚未确认批量发布页就绪，请查看浏览器。'};
+  }
  }
  async function waitEditor(){
   let editor=page.frames().find(f=>f.url().includes('/qianniu-batch-video'));
@@ -62,7 +78,7 @@ function createTaobaoTool({app,win,dialog,safeStorage,progress}){
   const summary={success:choices.length,failed:failures.length,failures};
   ready=prepared.status==='ready_for_publish'&&choices.length>0;
   progress(`准备完成：成功 ${summary.success}，跳过 ${summary.failed} 条。${ready?'请核对后确认发布。':''}`);
-  return {status:ready?'ready':prepared.status,choices:choices.map(({file,caption,product_name,product_id,topic_title})=>({file,caption,product_name,product_id,topic_title})),summary};
+  return {status:ready?'ready':prepared.status,choices:choices.map(({file,caption,product_name,product_id,products,topic_title})=>({file,caption,product_name,product_id,products,topic_title})),summary};
  }
  async function publish(){
   if(!ready||!choices||!activeRows?.length||submitting)throw Error('请先完成上传、填写和整批核验');
@@ -91,6 +107,6 @@ function createTaobaoTool({app,win,dialog,safeStorage,progress}){
   }finally{submitting=false;}
  }
  async function history(){const state=await journal();return Object.values(state.records).sort((a,b)=>b.at.localeCompare(a.at));}
- return {settings,saveKey,login,choose,prepare,publish,history,cleanup:async()=>{if(context)await context.close();}};
+ return {settings,saveKey,login,choose,prepare,publish,history,cleanup:async()=>{if(context){await loginState?.flush();await context.close();}}};
 }
 module.exports={createTaobaoTool,browserPath};
