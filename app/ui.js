@@ -38,25 +38,31 @@ document.getElementById('reset-filters').addEventListener('click',()=>{selectedO
 filterProjects();
 const checkButton=document.getElementById('check-update');
 const downloadButton=document.getElementById('download-update');
+const installButton=document.getElementById('install-update');
+const cancelUpdateButton=document.getElementById('cancel-update');
 const updateStatus=document.getElementById('update-status');
 window.desktop?.getVersion().then(v=>document.getElementById('app-version').textContent='v'+v+' · 桌面版').catch(()=>{});
 const updateDialog=document.getElementById('update-dialog');
 document.getElementById('close-update').addEventListener('click',()=>updateDialog.close());
+function renderUpdate(r){
+ const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'：'+(r.percent||0)+'%',downloaded:r.message||'下载并校验完成，可重启安装。',installing:r.message||'正在准备安装…'};
+ updateStatus.textContent=messages[r.status]||'请重新检查更新。';
+ const notes=document.getElementById('update-notes');notes.textContent=r.notes||'';notes.hidden=!r.notes;
+ downloadButton.hidden=r.status!=='available';downloadButton.disabled=false;
+ installButton.hidden=r.status!=='downloaded';installButton.disabled=false;
+ cancelUpdateButton.hidden=r.status!=='downloading';
+ checkButton.textContent=r.status==='downloaded'?'↻　更新已就绪':r.status==='downloading'?'↻　下载中 '+(r.percent||0)+'%':'↻　检查更新';
+}
+window.desktop?.onUpdate?.(renderUpdate);
 checkButton.addEventListener('click',async()=>{
- updateDialog.showModal();
- checkButton.disabled=true;checkButton.textContent='正在检查…';downloadButton.hidden=true;
- const notes=document.getElementById('update-notes');notes.hidden=true;updateStatus.textContent='正在连接更新服务…';
- try{
-  if(!window.desktop)throw new Error('请在桌面软件中检查更新。');
-  const r=await window.desktop.checkUpdate();
-  const messages={unconfigured:'尚未配置更新服务。发布地址配置完成后，即可在这里检查新版。',current:'当前已是最新版本（v'+r.current+'）。',available:'发现新版本 v'+r.latest+'，当前版本 v'+r.current+'。是否前往下载？',unsupported:'发现新版本 v'+r.latest+'，但当前系统或芯片的安装包尚未发布。',error:r.message};
-  updateStatus.textContent=messages[r.status]||'更新服务返回了未知状态。';
-  if(r.notes){notes.textContent=r.notes;notes.hidden=false;}
-  downloadButton.hidden=r.status!=='available';
- }catch(e){updateStatus.textContent=e.message||'检查失败，请稍后重试。';}
- finally{checkButton.disabled=false;checkButton.textContent='↻　检查更新';}
+ updateDialog.showModal();checkButton.disabled=true;
+ try{if(!window.desktop)throw Error('请在桌面软件中检查更新。');renderUpdate(await window.desktop.checkUpdate());}
+ catch(e){updateStatus.textContent=e.message;}
+ finally{checkButton.disabled=false;}
 });
-downloadButton.addEventListener('click',async()=>{try{await window.desktop.downloadUpdate();updateDialog.close();}catch{updateStatus.textContent='无法打开下载地址，请重新检查更新。';}});
+downloadButton.addEventListener('click',async()=>{downloadButton.disabled=true;try{renderUpdate(await window.desktop.downloadUpdate());}catch(e){updateStatus.textContent=e.message;downloadButton.disabled=false;}});
+cancelUpdateButton.addEventListener('click',()=>window.desktop.cancelUpdate().catch(e=>{updateStatus.textContent=e.message;}));
+installButton.addEventListener('click',async()=>{installButton.disabled=true;try{renderUpdate(await window.desktop.installUpdate());}catch(e){updateStatus.textContent=e.message;}finally{installButton.disabled=false;}});
 
 let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;

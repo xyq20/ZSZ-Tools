@@ -6,7 +6,7 @@ const {createMonthlyTool}=require('./monthly.cjs');
 const {requestInErpPage,validatePayload}=require('./erp-page.cjs');
 const {restoreWindow,bindLoginWindow}=require('./windows.cjs');
 function setupBusiness(win,app){
- let selected=null,priceResult=null,reportResult=null,busy=false;const loginWindows=new Map();
+ let selected=null,priceResult=null,reportResult=null,busy=false,updateLocked=false;const loginWindows=new Map();
  const origins={price:'https://vipscm.superboss.cc',report:'https://viperp.superboss.cc',monthly:'https://erpa.superboss.cc'};
  const sessions={price:session.fromPartition('persist:toolkit-scm'),report:session.fromPartition('persist:toolkit-erp')};
  sessions.monthly=sessions.report;
@@ -24,7 +24,7 @@ function setupBusiness(win,app){
   let payload;try{payload=await response.json();}catch{throw Error('未返回有效数据，请先登录对应快麦账号');}
   return validatePayload(payload);
  }
- function handle(name,fn){ipcMain.handle(name,async(e,...args)=>{if(e.sender!==win.webContents)throw Error('非法调用来源');try{return {ok:true,data:await fn(...args)};}catch(error){return {ok:false,error:error.message};}});}
+ function handle(name,fn){ipcMain.handle(name,async(e,...args)=>{if(e.sender!==win.webContents)throw Error('非法调用来源');try{if(updateLocked)throw Error('正在准备重启更新，请稍候');return {ok:true,data:await fn(...args)};}catch(error){return {ok:false,error:error.message};}});}
  async function exclusive(fn){if(busy)throw Error('已有任务正在执行，请等待完成');busy=true;try{return await fn();}finally{busy=false;}}
  async function loginWindow(tool,show=true){
   await loginReady;
@@ -50,6 +50,6 @@ function setupBusiness(win,app){
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});
- return {flushLogin:async()=>{await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();},isBusy:()=>busy};
+ return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async()=>{await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();},isBusy:()=>busy};
 }
 module.exports={setupBusiness};
