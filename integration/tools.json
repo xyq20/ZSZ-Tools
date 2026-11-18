@@ -47,6 +47,13 @@
         "test/validate-choices.test.js": "test/taobao-validation.test.cjs"
       }
     },
+    "taobao-reminders": {
+      "source": "../../../Documents/ChatGPT/淘宝7天提醒（谭）",
+      "files": {
+        "qianniu.py": "business/taobao-reminders-python/qianniu.py",
+        "remind.py": "business/taobao-reminders-python/remind.py"
+      }
+    },
     "sycm": {
       "source": "../3.生意参谋数据抓取",
       "files": {

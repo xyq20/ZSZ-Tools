@@ -47,9 +47,14 @@ function setupBusiness(win,app){
  for(const [action,method] of [['monthly-choose','choose'],['monthly-plan','plan'],['monthly-preview','preview'],['monthly-save','save'],['monthly-export','export'],['monthly-reports','openReports']])handle('business-'+action,(...args)=>exclusive(()=>monthly[method](...args)));
  const taobao=require('./taobao.cjs').createTaobaoTool({app,win,dialog,safeStorage,progress:message=>progress('taobao',message)});
  for(const [action,method] of [['taobao-settings','settings'],['taobao-save-key','saveKey'],['taobao-login','login'],['taobao-choose','choose'],['taobao-prepare','prepare'],['taobao-publish','publish'],['taobao-history','history']])handle('business-'+action,(...args)=>exclusive(()=>taobao[method](...args)));
+ const reminders=require('./taobao-reminders.cjs').createTaobaoReminders({
+  app,safeStorage,exclusive,blocked:()=>busy||updateLocked,progress:message=>progress('taobao-reminders',message)
+ });
+ handle('business-taobao-reminders-status',reminders.status);
+ for(const method of ['save','login','preview'])handle('business-taobao-reminders-'+method,(...args)=>exclusive(()=>reminders[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});
- return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async()=>{await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();},isBusy:()=>busy};
+ return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async()=>{reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();},isBusy:()=>busy};
 }
 module.exports={setupBusiness};

@@ -1,5 +1,5 @@
-const views=['home','report','price','monthly','taobao','sycm'];
-const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表',taobao:'谭 / 淘宝素材上传',sycm:'董卓 / 生意参谋数据抓取'};
+const views=['home','report','price','monthly','taobao','taobao-reminders','sycm'];
+const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒',sycm:'董卓 / 生意参谋数据抓取'};
 for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{
  const name=button.dataset.view;
  for(const id of views)document.getElementById(id).hidden=id!==name;
@@ -10,6 +10,7 @@ for(const button of document.querySelectorAll('[data-view]'))button.addEventList
   if(active)nav.setAttribute('aria-current','page');else nav.removeAttribute('aria-current');
  }
  window.scrollTo(0,0);
+ if(name==='taobao-reminders')loadReminders();
 });
 const search=document.getElementById('search');
 const ownerFilters=[...document.querySelectorAll('[data-owner-filter]')];
@@ -41,13 +42,26 @@ const downloadButton=document.getElementById('download-update');
 const installButton=document.getElementById('install-update');
 const cancelUpdateButton=document.getElementById('cancel-update');
 const updateStatus=document.getElementById('update-status');
+let updateNotesVersion=null;
+const updateSize=value=>(Number(value||0)/1024/1024).toFixed(1)+' MB';
 window.desktop?.getVersion().then(v=>document.getElementById('app-version').textContent='v'+v+' · 桌面版').catch(()=>{});
 const updateDialog=document.getElementById('update-dialog');
 document.getElementById('close-update').addEventListener('click',()=>updateDialog.close());
 function renderUpdate(r){
- const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'：'+(r.percent||0)+'%',downloaded:r.message||'下载并校验完成，可重启安装。',installing:r.message||'正在准备安装…'};
+ const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'，下载完成后可重启安装。',downloaded:r.message||'下载并校验完成，可重启安装。',installing:r.message||'正在准备安装…'};
  updateStatus.textContent=messages[r.status]||'请重新检查更新。';
- const notes=document.getElementById('update-notes');notes.textContent=r.notes||'';notes.hidden=!r.notes;
+ const notes=document.getElementById('update-notes'),notesDetails=document.getElementById('update-notes-details');
+ notes.textContent=r.notes||'';notesDetails.hidden=!r.notes;
+ if(updateNotesVersion!==r.latest){notesDetails.open=false;updateNotesVersion=r.latest;}
+ const progressVisible=['downloading','downloaded','installing'].includes(r.status);
+ document.getElementById('update-download-progress').hidden=!progressVisible;
+ const percent=r.status==='downloading'?Math.min(100,Math.max(0,Number(r.percent)||0)):100;
+ document.getElementById('update-progress-bar').value=percent;
+ document.getElementById('update-percent').textContent=percent+'%';
+ document.getElementById('update-progress-label').textContent=r.status==='downloaded'?'下载完成':r.status==='installing'?'准备安装':'下载进度';
+ const transferred=r.status==='downloading'?r.bytes:r.size;
+ const route=r.network==='system-proxy'?'系统代理':r.network==='direct'?'直连':'';
+ document.getElementById('update-transfer-detail').textContent=[r.total||r.size?updateSize(transferred)+' / '+updateSize(r.total||r.size):'',route].filter(Boolean).join(' · ');
  downloadButton.hidden=r.status!=='available';downloadButton.disabled=false;
  installButton.hidden=r.status!=='downloaded';installButton.disabled=false;
  cancelUpdateButton.hidden=r.status!=='downloading';
@@ -55,7 +69,7 @@ function renderUpdate(r){
 }
 window.desktop?.onUpdate?.(renderUpdate);
 checkButton.addEventListener('click',async()=>{
- updateDialog.showModal();checkButton.disabled=true;
+ document.getElementById('update-notes-details').open=false;updateDialog.showModal();checkButton.disabled=true;
  try{if(!window.desktop)throw Error('请在桌面软件中检查更新。');renderUpdate(await window.desktop.checkUpdate());}
  catch(e){updateStatus.textContent=e.message;}
  finally{checkButton.disabled=false;}
@@ -66,9 +80,10 @@ installButton.addEventListener('click',async()=>{installButton.disabled=true;try
 
 let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;
+let independentReminder=false;
 let busy=false,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false;
 const statusFor=tool=>document.getElementById(tool+'-progress');
-function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
+function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('taobao-reminders-enabled').disabled=busy||independentReminder;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
 async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
@@ -157,4 +172,48 @@ document.getElementById('sycm-resume').addEventListener('click',()=>run('sycm',a
  document.getElementById('sycm-log').textContent='';statusFor('sycm').textContent='正在读取上轮任务…';
  const r=await call('sycm-resume'),s=r.summary;hasSycmResult=true;
  statusFor('sycm').textContent=`${r.incomplete?'部分完成，请查看失败记录':'本次处理完成'}：成功 ${s.ok}，失败 ${s.fail}，本轮已完成跳过 ${s.skipped}。结果：${r.file}`;
+}));
+
+const reminderField = id => document.getElementById('taobao-reminders-' + id);
+function renderReminders(state) {
+ independentReminder = state.nativeAgent;
+ reminderField('at').value = state.at;
+ reminderField('enabled').checked = state.enabled;
+ reminderField('enabled').disabled = busy || independentReminder;
+ reminderField('recipient').value = state.recipient;
+ reminderField('webhook').placeholder = state.hasWebhook ? '已加密保存，留空沿用' : '仅加密保存在本机';
+ for (const field of ['webhook','recipient','enabled']) reminderField(field).closest('label').hidden = state.nativeAgent;
+ reminderField('settings').textContent = [
+  state.hasLogin ? '已保存千牛登录' : '待扫码登录',
+  state.nativeAgent ? '' : state.hasWebhook ? '已配置 Webhook' : '工具箱未配置 Webhook',
+  state.nativeAgent ? `独立后台程序每天 ${state.at} 巡检` : state.enabled ? `工具箱每天 ${state.at} 巡检` : '工具箱定时未启用',
+ ].filter(Boolean).join(' · ');
+ if (state.nativeAgent) reminderField('mode').textContent = '此 Mac 已安装独立巡检程序。保存北京时间可修改后台巡检时间，消息仍由已配置的飞书机器人发送。';
+ statusFor('taobao-reminders').textContent = state.message || '';
+}
+function loadReminders() {
+ return call('taobao-reminders-status').then(renderReminders).catch(error => {
+  statusFor('taobao-reminders').textContent = error.message;
+ });
+}
+reminderField('form').addEventListener('submit', event => {
+ event.preventDefault();
+ void run('taobao-reminders', async () => {
+  const state = await call('taobao-reminders-save', {
+   at: reminderField('at').value, webhook: reminderField('webhook').value,
+   recipient: reminderField('recipient').value, enabled: reminderField('enabled').checked,
+  });
+  reminderField('webhook').value = '';
+  renderReminders(state);
+  statusFor('taobao-reminders').textContent = '已保存提醒设置。';
+ });
+});
+reminderField('login').addEventListener('click', () => run('taobao-reminders', async () => {
+ renderReminders(await call('taobao-reminders-login'));
+}));
+reminderField('preview').addEventListener('click', () => run('taobao-reminders', async () => {
+ const state = await call('taobao-reminders-preview');
+ renderReminders({...state, message:'预览完成。'});
+ reminderField('result').textContent = state.message;
+ reminderField('result').hidden = false;
 }));

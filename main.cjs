@@ -2,7 +2,8 @@ const {app,BrowserWindow,ipcMain,dialog,shell,Menu}=require('electron');
 const path=require('node:path');
 app.commandLine.appendSwitch('lang','zh-CN');
 app.commandLine.appendSwitch('accept-lang','zh-CN');
-const {createUpdater,acknowledgeUpdate}=require('./business/app-update.cjs');
+const {createUpdateNetwork}=require('./business/update-network.cjs');
+const {createUpdater,acknowledgeUpdate,downloadFile}=require('./business/app-update.cjs');
 const updateConfig=require('./update-config.json');
 let win,updater;
 let business,quitting=false;
@@ -26,7 +27,8 @@ if(process.platform==='darwin')Menu.setApplicationMenu(Menu.buildFromTemplate([
 ]));
 win=new BrowserWindow({width:1280,height:850,minWidth:1000,minHeight:680,backgroundColor:'#f5f6f8',title:'钊叔工具箱',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
 business=require('./business/desktop.cjs').setupBusiness(win,app);
-updater=createUpdater({app,manifestUrl:updateConfig.manifestUrl,business,
+const updateNetwork=createUpdateNetwork(require('electron').session.fromPartition('toolkit-updates'));
+updater=createUpdater({app,manifestUrl:updateConfig.manifestUrl,business,fetchRelease:updateNetwork.manifest,getNetworkRoute:updateNetwork.route,downloader:(info,file,options)=>downloadFile(info,file,{...options,getResponse:updateNetwork.response}),
  notify:data=>{if(!win.isDestroyed())win.webContents.send('update-progress',data);},
  confirm:async()=>{const r=await dialog.showMessageBox(win,{type:'question',buttons:['稍后','重启并安装'],defaultId:0,cancelId:0,message:'重启并安装新版工具箱？',detail:'登录和配置会保留。尚未保存的预览结果需要重新查询；尚未发布的淘宝批次请先处理完毕。'});return r.response===1;}
 });

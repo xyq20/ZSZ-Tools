@@ -5,16 +5,17 @@ const {_electron}=require('playwright-core'),fs=require('node:fs/promises'),os=r
  await fs.writeFile(bootstrap,`
 const {app}=require('electron');app.setPath('appData',${JSON.stringify(directory)});app.getVersion=()=> '0.4.19';
 const m=require(${JSON.stringify(path.join(project,'business/app-update.cjs'))}),original=m.createUpdater;
-m.createUpdater=o=>original({...o,fetchRelease:async()=>({tag_name:'v0.4.20',assets:[{name:'-0.4.20-mac-arm64.dmg',browser_download_url:'https://github.com/xyq20/ZSZ-Tools/releases/download/v0.4.20/-0.4.20-mac-arm64.dmg',size:10,digest:'sha256:'+'a'.repeat(64)}]}),downloader:async(info,file,{signal,onProgress})=>{for(let i=1;i<=10;i++){await new Promise(r=>setTimeout(r,100));if(signal.aborted)throw Error('cancelled');onProgress(i,10);}}});
+m.createUpdater=o=>original({...o,fetchRelease:async()=>({tag_name:'v0.4.20',body:'更新日志测试',assets:[{name:'-0.4.20-mac-arm64.dmg',browser_download_url:'https://github.com/xyq20/ZSZ-Tools/releases/download/v0.4.20/-0.4.20-mac-arm64.dmg',size:10,digest:'sha256:'+'a'.repeat(64)}]}),downloader:async(info,file,{signal,onProgress})=>{for(let i=1;i<=10;i++){await new Promise(r=>setTimeout(r,100));if(signal.aborted)throw Error('cancelled');onProgress(i,10);}}});
 require(${JSON.stringify(path.join(project,'main.cjs'))});
 `);
  try{
  electron=await _electron.launch({executablePath:require('electron'),args:[bootstrap],env:{...process.env,ELECTRON_RUN_AS_NODE:''}});
  const page=await electron.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.locator('#check-update').click();await page.locator('#download-update').waitFor({state:'visible'});
- await page.locator('#download-update').click();await page.locator('#cancel-update').waitFor({state:'visible'});await page.locator('#cancel-update').click();await page.locator('#update-status').filter({hasText:'下载已取消'}).waitFor();
- await page.locator('#download-update').click();await page.locator('#install-update').waitFor({state:'visible'});assert(await page.locator('#update-status').textContent().then(x=>x.includes('校验完成')));
- await page.locator('#close-update').click();await page.locator('#check-update').click();assert(await page.locator('#install-update').isVisible());
+ assert.equal(await page.locator('#update-notes-details').getAttribute('open'),null);
+ await page.locator('#download-update').click();await page.locator('#cancel-update').waitFor({state:'visible'});assert(await page.locator('#update-progress-bar').isVisible());await page.locator('#cancel-update').click();await page.locator('#update-status').filter({hasText:'下载已取消'}).waitFor();
+ await page.locator('#download-update').click();await page.locator('#install-update').waitFor({state:'visible'});assert(await page.locator('#update-status').textContent().then(x=>x.includes('校验完成')));assert.equal(await page.locator('#update-progress-bar').getAttribute('value'),'100');assert.equal(await page.locator('#update-notes-details').getAttribute('open'),null);await page.locator('#update-notes-details summary').click();assert(await page.locator('#update-notes').isVisible());
+ await page.locator('#close-update').click();await page.locator('#check-update').click();assert(await page.locator('#install-update').isVisible());assert.equal(await page.locator('#update-notes-details').getAttribute('open'),null);
  await page.screenshot({path:path.join(directory,'downloaded.png')});
  await page.locator('#install-update').click();await page.locator('#update-status').filter({hasText:'已安装的工具箱'}).waitFor();assert.deepEqual(errors,[]);
  console.log('Update UI: cancel, progress, downloaded state retained, install gate verified; '+directory);

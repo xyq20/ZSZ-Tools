@@ -49,3 +49,9 @@
 新一轮建立独立本机副本并保留原文件名（支持自动年月改名），全量刷新选定范围。`last-task.json` 保存上轮目录和筛选，重启工具箱后仍可继续；续跑复用该目录和 `round_<mode>.json`，不重新复制原表。Python 校验日期、范围和工作簿摘要；非完整结束明确显示部分完成。Windows 使用 msvcrt 字节锁，Mac 使用 flock。
 
 发布资源只包含 Python 源码及私有运行时，不含原项目工作簿、登录信息和历史数据。运行结果位于用户数据目录 `team-toolkit/sycm/runs`，登录信息位于 `team-toolkit/sycm/auth`。
+
+## 淘宝商品提醒（谭）
+
+来源登记为 `taobao-reminders`。通过 `npm run tools:sync -- taobao-reminders --apply` 同步千牛网页接口和飞书发送业务核心，打包复用生意参谋的 Playwright/Python 运行环境。独立项目的 macOS 后台入口由原项目维护。
+
+工具箱定时在应用进程内按北京时间运行，首次启用前需扫码、保存 Webhook 并设置时间。手动预览不提交发送记录。设置、网页登录和去重记录位于本机的 `team-toolkit/taobao-reminders`。装有原独立巡检的 Mac 沿用其登录和记录，页面保存时间后由该后台进程执行。

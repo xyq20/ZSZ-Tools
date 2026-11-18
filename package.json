@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.21",
+  "version": "0.4.23",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -38,6 +38,7 @@
       "update-config.json",
       "business/**/*",
       "!business/monthly-python/**/*",
+      "!business/taobao-reminders-python/**/*",
       "modules/**/*",
       "!business/sycm-python/**/*"
     ],
@@ -102,6 +103,14 @@
         "to": "sycm-python",
         "filter": [
           "**/*.py"
+        ]
+      },
+      {
+        "from": "business/taobao-reminders-python",
+        "to": "taobao-reminders-python",
+        "filter": [
+          "qianniu.py",
+          "remind.py"
         ]
       }
     ]

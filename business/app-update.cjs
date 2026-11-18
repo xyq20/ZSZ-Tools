@@ -124,7 +124,7 @@ async function launchHelper({platform,directory,file,info,mac,token}){
   await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});child.unref();
  }finally{await handle.close();}
 }
-function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>true,platform=process.platform,arch=process.arch,fetchRelease=fetchManifest,downloader=downloadFile,prepare=prepareMac,launch=launchHelper}){
+function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>true,platform=process.platform,arch=process.arch,fetchRelease=fetchManifest,getNetworkRoute=async()=>null,downloader=downloadFile,prepare=prepareMac,launch=launchHelper}){
  let state={status:'idle',current:app.getVersion()},info=null,file=null,directory=null,operation=null,controller=null,canQuit=false;
  const root=path.join(app.getPath('userData'),'updates');
  const emit=patch=>{state={...state,...patch};notify({...state});return {...state};};
@@ -138,8 +138,9 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
   });},
   download(){if(operation)return operation;if(state.status==='downloaded')return Promise.resolve({...state});return run(async()=>{
    if(!info||info.status!=='available')throw Error('请先检查更新');
-   controller=new AbortController();emit({status:'downloading',percent:0,message:'正在下载更新…'});
+   controller=new AbortController();emit({status:'downloading',percent:0,bytes:0,total:info.size,network:null,message:'正在下载更新…'});
    try{
+    emit({network:await getNetworkRoute(info.download)});
     directory=path.join(root,info.latest+'-'+platform+'-'+arch);await fs.mkdir(directory,{recursive:true,mode:0o700});
     file=path.join(directory,platform==='darwin'?'installer.dmg':'installer.exe');
     let cached=false;try{await verifyFile(file,info);cached=true;}catch{}
