@@ -11,6 +11,11 @@ aside button.active{background:#deece4;color:#257750}
 aside .overview-link{display:flex;align-items:center;gap:10px;font-weight:600;font-size:13px}
 .nav-count{margin-left:auto;font-size:11px;font-weight:500}
 aside .person-nav{display:flex;align-items:center;gap:10px;padding:9px 10px}
+.nav-owner-group{margin:0 0 9px;padding:0 4px 5px;border-bottom:1px solid #e2e6ea}
+.nav-owner-heading{display:flex;align-items:center;gap:8px;padding:4px 6px 2px;color:#627285;font-size:12px}
+.nav-owner-heading .person-avatar{width:24px;height:24px;font-size:11px;border-radius:7px}
+.nav-tool{margin:0!important;padding:7px 10px 7px 38px!important;font-size:12px!important;color:#6d7b8b!important}
+.nav-tool.active{color:#257750!important}
 .person-avatar{display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;border-radius:8px;background:#e3eee7;color:#477760;font-size:12px;font-weight:600}
 .owner-price{background:#e7edf6;color:#526e9a}
 .owner-monthly{background:#eee8f6;color:#80649e}
