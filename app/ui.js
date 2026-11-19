@@ -212,10 +212,9 @@ function renderReminders(state) {
  for (const field of ['webhook','recipient','enabled']) reminderField(field).closest('label').hidden = state.nativeAgent;
  reminderField('settings').textContent = [
   state.hasLogin ? '已保存千牛登录' : '待扫码登录',
-  state.nativeAgent ? '' : state.hasWebhook ? '已配置 Webhook' : '工具箱未配置 Webhook',
-  state.nativeAgent ? `独立后台程序每天 ${state.at} 巡检` : state.enabled ? `工具箱每天 ${state.at} 巡检` : '工具箱定时未启用',
+  state.hasWebhook ? '已配置飞书机器人' : '未配置飞书机器人',
+  state.nativeAgent ? `独立巡检时间 ${state.at}` : state.enabled ? `工具箱每天 ${state.at} 巡检` : '工具箱定时未启用',
  ].filter(Boolean).join(' · ');
- if (state.nativeAgent) reminderField('mode').textContent = '此 Mac 已安装独立巡检程序。保存北京时间可修改后台巡检时间，消息仍由已配置的飞书机器人发送。';
  statusFor('taobao-reminders').textContent = state.message || '';
 }
 function loadReminders() {
@@ -241,6 +240,13 @@ reminderField('login').addEventListener('click', () => run('taobao-reminders', a
 reminderField('preview').addEventListener('click', () => run('taobao-reminders', async () => {
  const state = await call('taobao-reminders-preview');
  renderReminders({...state, message:'预览完成。'});
+ reminderField('result').textContent = state.message;
+ reminderField('result').hidden = false;
+}));
+reminderField('run-now').addEventListener('click', () => run('taobao-reminders', async () => {
+ reminderField('result').hidden = true;
+ const state = await call('taobao-reminders-run-now');
+ renderReminders({...state, message:'巡检完成。'});
  reminderField('result').textContent = state.message;
  reminderField('result').hidden = false;
 }));

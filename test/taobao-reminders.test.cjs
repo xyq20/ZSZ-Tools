@@ -30,10 +30,12 @@ test('toolbox schedule is opt-in, shares no secret with renderer, and preview ca
   });
   t.after(async () => { tool.stop(); await fs.rm(root, {recursive: true, force: true}); });
   assert.equal(tool.status().enabled, false);
+  await assert.rejects(tool.runNow(), /扫码登录/);
   await assert.rejects(tool.save(settings), /扫码登录/);
   const directory = path.join(root, 'taobao-reminders');
   await fs.mkdir(directory);
   await fs.writeFile(path.join(directory, 'qianniu-auth.json'), '{}');
+  await assert.rejects(tool.runNow(), /Webhook/);
   const status = await tool.save(settings);
   assert.equal(status.hasWebhook, true);
   assert.equal(JSON.stringify(status).includes(webhook), false);
@@ -47,6 +49,10 @@ test('toolbox schedule is opt-in, shares no secret with renderer, and preview ca
   await tool.preview();
   assert.deepEqual(args[1][2], ['--dry-run', '--settings-stdin']);
   assert.deepEqual(args[1][4], {recipient: settings.recipient});
+  await tool.save({...settings, enabled: false});
+  assert.equal((await tool.runNow()).message, '巡检完成');
+  assert.deepEqual(args[2][2], ['--run-now', '--settings-stdin']);
+  assert.deepEqual(args[2][4], {webhook, recipient: settings.recipient});
 });
 
 test('existing Mac background service reads the time set in the toolbox without a second schedule',
@@ -58,10 +64,12 @@ test('existing Mac background service reads the time set in the toolbox without 
     await fs.mkdir(state, {recursive: true});
     await fs.writeFile(path.join(agents, 'com.linchaoyang.taobao-product-reminders.plist'), 'agent');
     await fs.writeFile(path.join(state, 'reminders.sqlite3'), 'ledger');
+    const runs = [];
     const tool = createTaobaoReminders({
       app: {isPackaged: false, getPath: () => root},
       progress: () => {}, blocked: () => false, exclusive: fn => fn(),
-      runner: async () => assert.fail('standalone service must be the only scheduler'),
+      browserFinder: () => 'chrome',
+      runner: async (...args) => { runs.push(args); return '巡检完成'; },
     });
     t.after(async () => { tool.stop(); await fs.rm(root, {recursive: true, force: true}); });
     assert.equal(tool.status().nativeAgent, true);
@@ -70,4 +78,13 @@ test('existing Mac background service reads the time set in the toolbox without 
     assert.equal(updated.at, '10:37');
     assert.equal(updated.enabled, false);
     assert.equal(await fs.readFile(path.join(state, 'schedule-time'), 'utf8'), '10:37\n');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(runs.length, 0);
+    await fs.writeFile(path.join(state, 'qianniu-auth.json'), '{}');
+    await fs.writeFile(path.join(state, 'webhook'), webhook);
+    assert.equal((await tool.runNow()).message, '巡检完成');
+    assert.equal(runs.length, 1);
+    assert.deepEqual(runs[0][2], ['--run-now']);
+    assert.equal(runs[0][3].TAOBAO_REMINDER_STATE_DIR, state);
+    assert.equal(runs[0][4], undefined);
   });

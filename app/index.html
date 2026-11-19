@@ -102,10 +102,11 @@
 <section id="taobao-reminders" hidden>
   <h1>淘宝商品提醒（谭）</h1>
   <p>NEIGBORL 钊叔制 · 千牛商品创建满 7 天、满 15 天，各提醒一次。</p>
-  <p class="notice" id="taobao-reminders-mode">启用定时后，请保持工具箱运行和千牛登录有效。飞书机器人在有到期商品时发群消息。</p>
+  <p class="notice">「立即运行」会打开浏览器巡检，并将结果发送到飞书群。没有到期商品时也会发一条通知。</p>
   <div class="toolbar">
     <button id="taobao-reminders-login" data-job>扫码登录千牛</button>
     <button id="taobao-reminders-preview" data-job>预览待发提醒</button>
+    <button id="taobao-reminders-run-now" data-job>立即运行</button>
   </div>
   <form id="taobao-reminders-form">
     <div class="form">
@@ -118,5 +119,5 @@
   </form>
   <p id="taobao-reminders-settings" aria-live="polite"></p>
   <p id="taobao-reminders-progress" role="status" aria-live="polite"></p>
-  <pre id="taobao-reminders-result" hidden aria-label="待发提醒预览"></pre>
+  <pre id="taobao-reminders-result" hidden aria-label="淘宝巡检结果"></pre>
 </section><section id="sycm" hidden><h1>生意参谋数据抓取（董卓）</h1><p>登录生意参谋 → 选择分级总表 → 全量刷新数据 → 查看结果副本</p><div class="monthly-help"><details open><summary>使用说明</summary><ol><li>登录生意参谋，保存并关闭 Excel/WPS 中的总表。</li><li>选择总表，点击“开始新一轮”；中断后点击“继续上轮”。</li><li>完成后打开结果文件夹，查看表格和失败记录。</li></ol><p>遇滑块请手动通过。原表不改；续跑沿用上轮模式和筛选范围。</p></details><details><summary>逻辑说明</summary><ul><li>默认刷新粉、紫、黄、蓝商品的全部数据，已有值也更新。</li><li>先匹配名称；同名再核对货号，仍重复取排名最靠前的商品。</li><li>续跑只跳过本轮写入校验成功项；日期、表格或商品范围变化需新开一轮。</li><li>统计和月份命名按北京时间；成功更新的缺失流量渠道留空，失败项保留旧值并报告。</li><li>结果写入本机副本；失败或未处理完不会显示全部完成。</li></ul></details></div><div class="toolbar"><button id="sycm-login" data-job>登录生意参谋</button><button id="sycm-choose" data-job>选择分级总表</button><button id="sycm-start" data-job disabled>开始新一轮</button><button id="sycm-resume" data-job>继续上轮</button><button id="sycm-results" data-job>打开结果文件夹</button></div><div class="form"><label>抓取内容<select id="sycm-mode" data-job><option value="all">全部数据</option><option value="charts">曲线与流量</option><option value="flow">仅流量</option><option value="main-pic">仅主图分析</option></select></label><label>商品底色<select id="sycm-color" data-job><option value="default">粉、紫、黄、蓝（默认）</option><option value="all">全部六种颜色</option></select></label><label>指定商品（可选）<input id="sycm-name" data-job placeholder="多个商品名称用逗号分隔"></label></div><p id="sycm-book">未选择分级总表</p><p id="sycm-progress" role="status" aria-live="polite">首次使用需要手动登录。抓取过程只调用同源接口，滑块由你手动处理。</p><pre id="sycm-log" aria-label="运行日志"></pre></section><div class="status">● 本地工作台<span>工具内嵌 · 统一入口</span></div></main><div role="status" id="toast" hidden></div><dialog id="update-dialog" aria-labelledby="update-title"><h2 id="update-title">检查更新</h2><p id="update-status" role="status" aria-live="polite"></p><div id="update-download-progress" hidden><div class="update-progress-heading"><span id="update-progress-label">下载进度</span><strong id="update-percent">0%</strong></div><progress id="update-progress-bar" max="100" value="0" aria-labelledby="update-progress-label"></progress><div id="update-transfer-detail"></div></div><details id="update-notes-details" hidden><summary>更新日志</summary><pre id="update-notes"></pre></details><div class="dialog-actions"><button id="close-update">关闭</button><button id="cancel-update" hidden>取消下载</button><button id="download-update" hidden>下载更新</button><button id="install-update" hidden>重启并安装</button></div></dialog><script src="ui.js"></script></body></html>

@@ -74,6 +74,7 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   const stateDir = nativeAgent ? path.join(legacyRoot, 'state') : directory;
   const authFile = path.join(stateDir, 'qianniu-auth.json');
   const nativeTimeFile = path.join(stateDir, 'schedule-time');
+  const nativeWebhookFile = path.join(stateDir, 'webhook');
   const scripts = app.isPackaged ? path.join(process.resourcesPath, 'taobao-reminders-python') :
     path.join(__dirname, 'taobao-reminders-python');
   const python = runtimePaths(app).python;
@@ -101,7 +102,8 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       if (!CLOCK.test(at)) at = INITIAL.at;
     }
     return {
-      enabled: !nativeAgent && config.enabled, at, hasWebhook: Boolean(config.webhook),
+      enabled: !nativeAgent && config.enabled, at,
+      hasWebhook: nativeAgent ? fs.existsSync(nativeWebhookFile) : Boolean(config.webhook),
       recipient: config.recipient, hasLogin: fs.existsSync(authFile), nativeAgent,
       message: configError || lastResult,
     };
@@ -167,6 +169,22 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       progress('正在查询千牛商品创建时间…');
       const message = await execute('remind.py', ['--dry-run', '--settings-stdin'], {recipient: config.recipient});
       return {...status(), message};
+    },
+    async runNow() {
+      const {hasLogin, hasWebhook} = status();
+      if (!hasLogin) throw Error('请先扫码登录千牛');
+      if (!nativeAgent && configError) throw Error(configError);
+      if (!hasWebhook) throw Error('请先配置飞书机器人 Webhook');
+      const {day} = beijingClock(now());
+      progress('正在查询千牛商品，完成后将发送飞书消息…');
+      lastResult = nativeAgent
+        ? await execute('remind.py', ['--run-now'])
+        : await execute('remind.py', ['--run-now', '--settings-stdin'], {
+          webhook: config.webhook, recipient: config.recipient,
+        });
+      completedDay = day;
+      retryAfter = 0;
+      return {...status(), message: lastResult};
     },
     stop() { stopped = true; clearInterval(timer); clearImmediate(initialTick); },
   };

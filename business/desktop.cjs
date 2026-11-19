@@ -52,6 +52,7 @@ function setupBusiness(win,app){
  });
  handle('business-taobao-reminders-status',reminders.status);
  for(const method of ['save','login','preview'])handle('business-taobao-reminders-'+method,(...args)=>exclusive(()=>reminders[method](...args)));
+ handle('business-taobao-reminders-run-now',()=>exclusive(reminders.runNow));
  const stock=require('./taobao-stock.cjs').createTaobaoStockTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('taobao-stock',message)});
  for(const [action,method] of [['login','login'],['verify-login','verifyLogin'],['choose','choose'],['start','start'],['resume','resume'],['report','openReport']])handle('business-taobao-stock-'+action,(...args)=>exclusive(()=>stock[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});

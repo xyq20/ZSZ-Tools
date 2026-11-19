@@ -54,7 +54,7 @@
 
 来源登记为 `taobao-reminders`。通过 `npm run tools:sync -- taobao-reminders --apply` 同步千牛网页接口和飞书发送业务核心，打包复用生意参谋的 Playwright/Python 运行环境。独立项目的 macOS 后台入口由原项目维护。
 
-工具箱定时在应用进程内按北京时间运行，首次启用前需扫码、保存 Webhook 并设置时间。手动预览不提交发送记录。设置、网页登录和去重记录位于本机的 `team-toolkit/taobao-reminders`。装有原独立巡检的 Mac 沿用其登录和记录，页面保存时间后由该后台进程执行。
+工具箱定时在应用进程内按北京时间运行，首次启用前需扫码、保存 Webhook 并设置时间。「立即运行」打开可见浏览器巡检并发送结果，查无到期商品也会发送通知。预览只展示消息。设置、网页登录和去重记录位于本机的 `team-toolkit/taobao-reminders`。装有原独立巡检的 Mac 手动运行时沿用其登录、Webhook 和去重记录，页面保存时间后由该后台进程读取。
 
 ## 自动库存填写（三公）
 

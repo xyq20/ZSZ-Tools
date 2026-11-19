@@ -59,6 +59,32 @@ def is_table_response(response, page_number):
         return False
 
 
+def table_request_options(response):
+    query = parse_qs(urlsplit(response.url).query)
+    envelope = json.loads(parse_qs(response.request.post_data)["data"][0])
+    options = {key: query[key][0] for key in ("api", "v", "appKey", "ttid", "dataType") if key in query}
+    options.update(type="POST", timeout=12_000, data=envelope)
+    return options
+
+
+def request_table_page(page, options, page_number):
+    envelope = options["data"]
+    body = json.loads(envelope["jsonBody"])
+    body["pagination"]["current"] = page_number
+    data = {**envelope, "jsonBody": json.dumps(body, ensure_ascii=False)}
+    with page.expect_response(lambda response: is_table_response(response, page_number)) as pending:
+        page.evaluate(
+            """async options => {
+                const client = window.lib?.mtop;
+                if (typeof client?.request !== 'function') throw new Error('MTOP client unavailable');
+                // The observed HTTP response supplies the business status, including verification.
+                await client.request(options).catch(() => {});
+            }""",
+            {**options, "data": data},
+        )
+    return pending.value
+
+
 def parse_item(row):
     description = [part["text"] for part in row["itemDesc"]["desc"] if isinstance(part.get("text"), str)]
     code = next(
@@ -80,7 +106,10 @@ def read_table(response, page_number, expected_total):
         raise RuntimeError(f"千牛商品列表第 {page_number} 页请求失败（HTTP {response.status}）")
     try:
         outer = response.json()
-        if not outer["ret"][0].startswith("SUCCESS::"):
+        result_code = outer["ret"][0].split("::", 1)[0]
+        if result_code == "FAIL_SYS_USER_VALIDATE":
+            raise RuntimeError(f"千牛商品列表第 {page_number} 页需要用户验证，请打开千牛完成验证后重试")
+        if result_code != "SUCCESS":
             raise RuntimeError(f"千牛商品列表第 {page_number} 页未返回成功状态")
         result = json.loads(outer["data"]["result"])
         if result["success"] is not True:
@@ -101,6 +130,16 @@ def read_table(response, page_number, expected_total):
         return [parse_item(row) for row in rows], total
     except (KeyError, IndexError, TypeError, ValueError) as error:
         raise RuntimeError(f"千牛商品列表第 {page_number} 页返回格式已变更") from error
+
+
+def is_verified_first_page(response):
+    if not is_table_response(response, 1):
+        return False
+    try:
+        read_table(response, 1, None)
+    except RuntimeError:
+        return False
+    return True
 
 
 def save_auth(context):
@@ -126,7 +165,7 @@ def fetch_products(oldest):
     with sync_playwright() as playwright:
         page = None
         try:
-            browser = launch_browser(playwright, headless=True)
+            browser = launch_browser(playwright, headless=False)
         except PlaywrightError as error:
             raise RuntimeError("无法启动 Chrome 或 Edge，请检查浏览器安装") from error
         try:
@@ -145,35 +184,44 @@ def fetch_products(oldest):
 
 
 def read_products(page, oldest):
-    page_number = 1
-    total = None
+    with page.expect_response(lambda response: is_table_response(response, 1)) as pending:
+        page.goto(first_page_url(), wait_until="domcontentloaded")
+    first_response = pending.value
+    rows, total = read_table(first_response, 1, None)
+    verify_seller(page)
+    options = table_request_options(first_response)
+
     products = []
     seen = set()
     previous = None
-    while True:
-        with page.expect_response(lambda response: is_table_response(response, page_number)) as pending:
-            if page_number == 1:
-                page.goto(first_page_url(), wait_until="domcontentloaded")
-            else:
-                page.get_by_role("button", name=f"下一页，当前第{page_number - 1}页").first.click()
-
-        rows, total = read_table(pending.value, page_number, total)
-        if page_number == 1:
-            verify_seller(page)
+    oldest_date = oldest.isoformat()
+    page_count = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    for page_number in range(1, page_count + 1):
+        if page_number > 1:
+            response = request_table_page(page, options, page_number)
+            rows, _ = read_table(response, page_number, total)
         for row in rows:
-            item_id = row["item_id"]
+            item_id = str(row["item_id"])
             created_at = row["created_at"]
             if item_id in seen or (previous is not None and created_at > previous):
                 raise RuntimeError("千牛商品分页重复或创建时间排序异常，请重跑本次巡检")
             previous = created_at
             seen.add(item_id)
+            if created_at[:10] >= oldest_date:
+                products.append(row)
 
-        products.extend(rows)
-        if page_number * PAGE_SIZE >= total or (previous and previous[:10] < oldest.isoformat()):
-            save_auth(page.context)
-            print(f"千牛 {SELLER} · 全部 {total} 件 · 核验 {page_number} 页")
-            return products
-        page_number += 1
+        if previous is not None and previous[:10] < oldest_date:
+            break
+
+    if page_number == page_count and len(seen) != total:
+        raise RuntimeError("千牛商品去重数量与全部商品总数不符，请重跑本次巡检")
+    save_auth(page.context)
+    print(
+        f"千牛 {SELLER} · 全店 {total} 件 · 已核验 {page_number} 页（{len(seen)} 件），"
+        f"创建日期自 {oldest_date} 起保留 {len(products)} 件",
+        flush=True,
+    )
+    return products
 
 
 def login():
@@ -183,10 +231,10 @@ def login():
         try:
             context = browser.new_context(timezone_id="Asia/Shanghai")
             page = context.new_page()
-            page.goto(first_page_url(), wait_until="domcontentloaded")
-            print(f"请在 Chrome 里扫码登录 {SELLER}", flush=True)
-            verify_seller(page, timeout=300_000)
-            page.get_by_text("创建时间", exact=True).first.wait_for(state="visible")
+            print(f"请在浏览器里扫码登录 {SELLER}，并完成千牛要求的验证", flush=True)
+            with page.expect_response(is_verified_first_page, timeout=300_000):
+                page.goto(first_page_url(), wait_until="domcontentloaded")
+            verify_seller(page)
             save_auth(context)
             print(f"已保存 {SELLER} 的千牛登录状态")
         finally:
@@ -197,7 +245,7 @@ if __name__ == "__main__":
     try:
         login()
     except TimeoutError:
-        sys.exit("千牛登录未在等待时间内完成")
+        sys.exit("未收到千牛商品列表，请确认已登录目标店铺并完成验证后重试")
     except PlaywrightError:
         sys.exit("无法打开千牛登录页，请检查 Chrome 或 Edge 以及网络")
     except (OSError, RuntimeError) as error:

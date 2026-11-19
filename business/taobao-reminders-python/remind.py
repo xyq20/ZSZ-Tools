@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send one Feishu reminder per Taobao item and creation-age milestone."""
+"""Report Taobao product-age patrol results to Feishu."""
 
 import argparse
 from dataclasses import dataclass
@@ -19,6 +19,7 @@ LOCAL = Path(os.environ.get("TAOBAO_REMINDER_STATE_DIR") or
              Path.home() / "Library" / "Application Support" / "TaobaoProductReminders" / "state")
 BEIJING = ZoneInfo("Asia/Shanghai")
 MILESTONES = (7, 15)
+MAX_PRODUCT_AGE_DAYS = 16
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,13 @@ def message(due, age, items, recipient, part, parts):
     return "\n".join(lines)
 
 
+def empty_message(today, product_count):
+    return (
+        f"【淘宝商品巡检】\n{today:%Y-%m-%d} 已巡检 {product_count} 件近期创建的商品。\n"
+        "本次没有需要发送的满 7 天或满 15 天提醒。"
+    )
+
+
 class WebhookRejected(RuntimeError):
     """Feishu explicitly rejected the request."""
 
@@ -108,8 +116,23 @@ def open_ledger():
         )
     """)
     db.execute("CREATE TABLE IF NOT EXISTS progress (checked_through DATE)")
+    db.execute("CREATE TABLE IF NOT EXISTS empty_notice_pending (notice_day DATE PRIMARY KEY NOT NULL)")
     db.commit()
     return db
+
+
+def send_empty_notice(db, webhook, today, product_count):
+    day = today.isoformat()
+    with db:
+        inserted = db.execute("INSERT OR IGNORE INTO empty_notice_pending VALUES (?)", (day,))
+    if inserted.rowcount == 0:
+        raise RuntimeError("今天的无到期提醒通知发送结果待核实，请先核对飞书群消息")
+    try:
+        send_webhook(webhook, empty_message(today, product_count))
+    except WebhookRejected:
+        with db:
+            db.execute("DELETE FROM empty_notice_pending WHERE notice_day = ?", (day,))
+        raise
 
 
 def lock_run(lock):
@@ -132,6 +155,8 @@ def read_products(oldest, fixture=None):
     products = {}
     for row in rows:
         item = Product.from_record(row)
+        if item.created_at.date() < oldest:
+            continue
         if item.item_id in products and item.created_at != products[item.item_id].created_at:
             raise ValueError(f"同一商品的创建时间不一致，商品 ID {item.item_id}")
         products[item.item_id] = item
@@ -141,7 +166,7 @@ def read_products(oldest, fixture=None):
 def run(db, args, today):
     progress = db.execute("SELECT checked_through FROM progress").fetchone()
     first_day = date.fromisoformat(progress[0]) + timedelta(days=1) if progress else today
-    if args.fixture:
+    if args.fixture or ((args.dry_run or args.run_now) and first_day > today):
         first_day = today
     if first_day > today:
         print("今天的商品已巡检")
@@ -154,21 +179,27 @@ def run(db, args, today):
         with db:
             db.execute("INSERT INTO progress VALUES (?)", ((today - timedelta(days=1)).isoformat(),))
 
-    products = read_products(first_day - timedelta(days=max(MILESTONES)), args.fixture)
+    products = read_products(today - timedelta(days=MAX_PRODUCT_AGE_DAYS), args.fixture)
     recorded = {(row[0], row[1]) for row in db.execute("SELECT item_id, age FROM delivery")}
     groups = due_groups(products, first_day, today, recorded)
     recipient_path = LOCAL / "recipient-id"
     recipient = args.settings.get("recipient")
     if recipient is None:
         recipient = recipient_path.read_text(encoding="utf-8").strip() if recipient_path.is_file() else ""
-    if recipient and (recipient == "all" or not re.fullmatch(r"[A-Za-z0-9_\-]+", recipient)):
+    if groups and recipient and (recipient == "all" or not re.fullmatch(r"[A-Za-z0-9_\-]+", recipient)):
         raise ValueError("小谭的飞书用户 ID 格式不正确")
-    if groups and not args.dry_run:
+    if not args.dry_run:
         webhook = args.settings.get("webhook")
         if webhook is None:
             webhook = (LOCAL / "webhook").read_text(encoding="utf-8").strip()
         if not re.fullmatch(r"https://open\.feishu\.cn/open-apis/bot/v2/hook/[0-9a-f-]+", webhook):
             raise ValueError("飞书 Webhook 地址格式不正确")
+
+    if not groups:
+        if args.dry_run:
+            print(empty_message(today, len(products)), end="\n\n")
+        else:
+            send_empty_notice(db, webhook, today, len(products))
 
     for (due, age), items in groups:
         batches = [items[i:i + 10] for i in range(0, len(items), 10)]
@@ -195,14 +226,18 @@ def run(db, args, today):
 
     if not args.dry_run:
         with db:
-            db.execute("DELETE FROM progress")
-            db.execute("INSERT INTO progress VALUES (?)", (today.isoformat(),))
+            db.execute("DELETE FROM empty_notice_pending WHERE notice_day = ?", (today.isoformat(),))
+            if not progress or progress[0] < today.isoformat():
+                db.execute("DELETE FROM progress")
+                db.execute("INSERT INTO progress VALUES (?)", (today.isoformat(),))
+        print("已发送本次巡检结果到飞书")
     print(f"{first_day} 至 {today}，商品 {len(products)} 件，到期提醒 {sum(len(items) for _, items in groups)} 条")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="预览，跳过飞书发送和巡检进度更新")
+    parser.add_argument("--run-now", action="store_true", help="手动巡检，即使今天已经巡检")
     parser.add_argument("--fixture", type=Path, help="从本地 JSON 验证提醒规则，只能用于预览")
     parser.add_argument("--date", type=date.fromisoformat, help="预览指定日期，仅接受测试数据")
     parser.add_argument("--settings-stdin", action="store_true", help=argparse.SUPPRESS)
