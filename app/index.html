@@ -5,7 +5,7 @@
     <button data-view="home" class="active overview-link" aria-current="page"><span aria-hidden="true">▦</span> 项目总览 <span class="nav-count">5</span></button>
     <div class="nav-label">按使用人</div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><strong>丹姐</strong></div><button data-view="report" class="nav-tool"><span>销售月报</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><strong>三公</strong></div><button data-view="price" class="nav-tool"><span>批量导入价格</span></button></div>
+    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><strong>三公</strong></div><button data-view="price" class="nav-tool"><span>批量导入价格</span></button><button data-view="taobao-stock" class="nav-tool"><span>自动库存填写</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-monthly" aria-hidden="true">双</span><strong>双姐</strong></div><button data-view="monthly" class="nav-tool"><span>分级总表</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><strong>谭</strong></div><button data-view="taobao" class="nav-tool"><span>淘宝素材上传</span></button><button data-view="taobao-reminders" class="nav-tool"><span>淘宝商品提醒</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-sycm" aria-hidden="true">董</span><strong>董卓</strong></div><button data-view="sycm" class="nav-tool"><span>生意参谋数据抓取</span></button></div>
@@ -15,7 +15,7 @@
 <main>
   <header>工作空间 / <span id="crumb">项目总览</span><span class="version">本地桌面工具</span></header>
   <section id="home" aria-labelledby="home-title">
-    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">5 位同事 <span aria-hidden="true">/</span> 6 个项目</span></div>
+    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">5 位同事 <span aria-hidden="true">/</span> 7 个项目</span></div>
     <div class="home-toolbar">
       <div class="owner-filters" role="group" aria-label="按使用人筛选">
         <button data-owner-filter="all" aria-pressed="true">全部 <span>5</span></button>
@@ -41,13 +41,19 @@
         </div>
       </div>
       <div class="owner-group" data-owner="三公" role="group" aria-labelledby="owner-price">
-        <div class="owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><h2 id="owner-price">三公</h2><span class="owner-count">1 个项目</span></div>
+        <div class="owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><h2 id="owner-price">三公</h2><span class="owner-count">2 个项目</span></div>
         <div class="cards">
           <article data-search="三公 价格 Excel 批量 商品 核对 公式" aria-labelledby="tool-price">
             <div class="card-heading"><i aria-hidden="true">◇</i><h3 id="tool-price">批量导入价格</h3></div>
             <p>查询并核对空白价格，保留已有价格与公式。</p>
             <div class="tags">商品价格 · 批量核对</div>
             <footer><span>复用本机登录</span><button data-view="price" aria-label="进入三公的批量导入价格">进入工具 <span aria-hidden="true">→</span></button></footer>
+          </article>
+          <article data-search="三公 自动库存填写 淘宝 千牛 库存 SKU Excel 二店" aria-labelledby="tool-taobao-stock">
+            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-taobao-stock">自动库存填写</h3></div>
+            <p>按库存表匹配二店商品，核验 SKU 库存后同步上下架状态。</p>
+            <div class="tags">Excel 匹配 · 库存核验 · 断点续跑</div>
+            <footer><span>本机独立二店登录</span><button data-view="taobao-stock" aria-label="进入三公的自动库存填写">进入工具 <span aria-hidden="true">→</span></button></footer>
           </article>
         </div>
       </div>

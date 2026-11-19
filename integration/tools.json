@@ -54,6 +54,25 @@
         "remind.py": "business/taobao-reminders-python/remind.py"
       }
     },
+    "taobao-stock": {
+      "source": "../../../Documents/ChatGPT/自动库存填写",
+      "files": {
+        "toolbox_bridge.py": "business/taobao-stock/bridge.py",
+        "taobao_stock/__init__.py": "business/taobao-stock/taobao_stock/__init__.py",
+        "taobao_stock/api_payload.py": "business/taobao-stock/taobao_stock/api_payload.py",
+        "taobao_stock/batch.py": "business/taobao-stock/taobao_stock/batch.py",
+        "taobao_stock/browser.py": "business/taobao-stock/taobao_stock/browser.py",
+        "taobao_stock/engine.py": "business/taobao-stock/taobao_stock/engine.py",
+        "taobao_stock/errors.py": "business/taobao-stock/taobao_stock/errors.py",
+        "taobao_stock/excel.py": "business/taobao-stock/taobao_stock/excel.py",
+        "taobao_stock/matching.py": "business/taobao-stock/taobao_stock/matching.py",
+        "taobao_stock/report.py": "business/taobao-stock/taobao_stock/report.py",
+        "taobao_stock/session.py": "business/taobao-stock/taobao_stock/session.py",
+        "taobao_stock/state.py": "business/taobao-stock/taobao_stock/state.py",
+        "taobao_stock/summary_report.py": "business/taobao-stock/taobao_stock/summary_report.py",
+        "taobao_stock/workflow.py": "business/taobao-stock/taobao_stock/workflow.py"
+      }
+    },
     "sycm": {
       "source": "../3.生意参谋数据抓取",
       "files": {

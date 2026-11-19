@@ -194,6 +194,69 @@
           "sha256": "ee64db5086adebde5f1cce0de487b7773b228efd2f64ac70c6fbc9d4fb175fb1"
         }
       }
+    },
+    "taobao-stock": {
+      "source": "../../../Documents/ChatGPT/自动库存填写",
+      "commit": "abdd40547138dfed2ac3e88f58df655bc7a17db0",
+      "dirty": false,
+      "files": {
+        "toolbox_bridge.py": {
+          "target": "business/taobao-stock/bridge.py",
+          "sha256": "54311477d0f461db57cf81a868116bfb2ca133c7eb733a140c42cfe7380c4e0e"
+        },
+        "taobao_stock/__init__.py": {
+          "target": "business/taobao-stock/taobao_stock/__init__.py",
+          "sha256": "56c28c9a4ccd6245f8554916c399eafefa76fca22b793bd10738be1cf979ed61"
+        },
+        "taobao_stock/api_payload.py": {
+          "target": "business/taobao-stock/taobao_stock/api_payload.py",
+          "sha256": "eccfaa9ade5cf2b985f08c7707ef2a3f18f7f4cc20a5d4366c1b7e0c2fd59545"
+        },
+        "taobao_stock/batch.py": {
+          "target": "business/taobao-stock/taobao_stock/batch.py",
+          "sha256": "8087a91000576701f9c46d265c88d1896cf842550f1d4440654d44a195e50ada"
+        },
+        "taobao_stock/browser.py": {
+          "target": "business/taobao-stock/taobao_stock/browser.py",
+          "sha256": "5ab400a6a4b5a944fc2b3934a6a7038cd76e4be2833abf7b33a4cf4e9eb43199"
+        },
+        "taobao_stock/engine.py": {
+          "target": "business/taobao-stock/taobao_stock/engine.py",
+          "sha256": "f914f5ef2527d1da121629b0fe9bfeee951bb4c2b028b9f91af44d69f745333d"
+        },
+        "taobao_stock/errors.py": {
+          "target": "business/taobao-stock/taobao_stock/errors.py",
+          "sha256": "1ff10c6628f663ec7830e20298e192ccf9e73a4e044707dfcd86984d5de347cb"
+        },
+        "taobao_stock/excel.py": {
+          "target": "business/taobao-stock/taobao_stock/excel.py",
+          "sha256": "9fc8728365f9b005a9a2b3cf365cbf6959c689b58940379af209c348826fbc38"
+        },
+        "taobao_stock/matching.py": {
+          "target": "business/taobao-stock/taobao_stock/matching.py",
+          "sha256": "6ddeb2b035e75888f16a8c5a8febd4eaffdeca4fe8e211cd0c680b08509eec43"
+        },
+        "taobao_stock/report.py": {
+          "target": "business/taobao-stock/taobao_stock/report.py",
+          "sha256": "0e57ceb30bce0542d1345b5f0fbdaf057b8b64d1094421820648c89c96ab64fb"
+        },
+        "taobao_stock/session.py": {
+          "target": "business/taobao-stock/taobao_stock/session.py",
+          "sha256": "e9b4408d48c50c56309e0fa79991f54b952c4f1daa5f1b635203eaaece9dc5fc"
+        },
+        "taobao_stock/state.py": {
+          "target": "business/taobao-stock/taobao_stock/state.py",
+          "sha256": "a220fdff6e5c9a2ed3250aea1b7c94ab00a9ecc8e05852ac99844b1a76483807"
+        },
+        "taobao_stock/summary_report.py": {
+          "target": "business/taobao-stock/taobao_stock/summary_report.py",
+          "sha256": "197ebe34eef8bd8939ec45e1ee003fcaef3bfab211062223e0e0e68797fe15d5"
+        },
+        "taobao_stock/workflow.py": {
+          "target": "business/taobao-stock/taobao_stock/workflow.py",
+          "sha256": "41bd13955c6f145e2d36033eba928d1b542712e4417116d6de6069df265b0ddd"
+        }
+      }
     }
   }
 }

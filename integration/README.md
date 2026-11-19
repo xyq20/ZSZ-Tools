@@ -55,3 +55,11 @@
 来源登记为 `taobao-reminders`。通过 `npm run tools:sync -- taobao-reminders --apply` 同步千牛网页接口和飞书发送业务核心，打包复用生意参谋的 Playwright/Python 运行环境。独立项目的 macOS 后台入口由原项目维护。
 
 工具箱定时在应用进程内按北京时间运行，首次启用前需扫码、保存 Webhook 并设置时间。手动预览不提交发送记录。设置、网页登录和去重记录位于本机的 `team-toolkit/taobao-reminders`。装有原独立巡检的 Mac 沿用其登录和记录，页面保存时间后由该后台进程执行。
+
+## 自动库存填写（三公）
+
+业务源码位于 `Documents/ChatGPT/自动库存填写`，来源登记为 `taobao-stock`。库存匹配、Excel 黄色库存解析、任务状态、报告和安全执行引擎从该项目按文件白名单同步到 `business/taobao-stock`；Electron 接入和面板由工具箱维护。运行时复用工具箱内置 Python、Playwright 与 openpyxl。
+
+每位同事在本机首次打开二店登录窗口，手动登录“中古Remake商店”并完成验证。独立浏览器档案、店铺绑定、Excel 快照、可恢复任务及简洁报告保存在该用户的 `team-toolkit/taobao-stock` 目录。安装包不包含这些数据。员工选择 Excel 并启动后，系统逐条核验匹配和库存，上下架结果按已验证的千牛网页内部接口回读，接口并非淘宝官方开放 API。
+
+修改库存业务逻辑时编辑独立来源项目，运行 `python3 -m unittest discover -s tests -q`，再执行 `npm run tools:sync -- taobao-stock --apply`、`npm test` 和 `npm run tools:verify`。不手动编辑同步副本；更新工具箱运行包还需按本地安装规则构建并验收。

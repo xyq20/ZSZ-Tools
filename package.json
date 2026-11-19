@@ -1,13 +1,13 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.23",
+  "version": "0.4.24",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:win": "electron-builder --win nsis",
+    "dist:win": "electron-builder --win nsis --x64",
     "prepare:runtimes": "node scripts/prepare-runtimes.cjs",
     "test": "node --test test/*.test.cjs",
     "tools:sync": "node scripts/sync-tools.cjs",
@@ -40,7 +40,8 @@
       "!business/monthly-python/**/*",
       "!business/taobao-reminders-python/**/*",
       "modules/**/*",
-      "!business/sycm-python/**/*"
+      "!business/sycm-python/**/*",
+      "!business/taobao-stock/**/*"
     ],
     "mac": {
       "extendInfo": {
@@ -111,6 +112,15 @@
         "filter": [
           "qianniu.py",
           "remind.py"
+        ]
+      },
+      {
+        "from": "business/taobao-stock",
+        "to": "taobao-stock",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
         ]
       }
     ]
