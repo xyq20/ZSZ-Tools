@@ -14,6 +14,7 @@ test('reminder settings accept Beijing time and a Feishu webhook for a single re
   assert.throws(() => parseSettings({...settings, at: '24:00'}), /配置/);
   assert.throws(() => parseSettings({...settings, webhook: webhook + '?x=1'}), /Webhook/);
   assert.throws(() => parseSettings({...settings, recipient: 'all'}), /用户 ID/);
+  assert.throws(() => parseSettings({...settings, recipient: 'ALL'}), /用户 ID/);
 });
 
 test('toolbox schedule is opt-in, shares no secret with renderer, and preview cannot send', async t => {
@@ -36,6 +37,9 @@ test('toolbox schedule is opt-in, shares no secret with renderer, and preview ca
   await fs.mkdir(directory);
   await fs.writeFile(path.join(directory, 'qianniu-auth.json'), '{}');
   await assert.rejects(tool.runNow(), /Webhook/);
+  await assert.rejects(tool.save({...settings, recipient: ''}), /用户 ID/);
+  await tool.save({...settings, enabled: false, recipient: ''});
+  await assert.rejects(tool.runNow(), /用户 ID/);
   const status = await tool.save(settings);
   assert.equal(status.hasWebhook, true);
   assert.equal(JSON.stringify(status).includes(webhook), false);
@@ -82,6 +86,11 @@ test('existing Mac background service reads the time set in the toolbox without 
     assert.equal(runs.length, 0);
     await fs.writeFile(path.join(state, 'qianniu-auth.json'), '{}');
     await fs.writeFile(path.join(state, 'webhook'), webhook);
+    await assert.rejects(tool.runNow(), /用户 ID/);
+    const configured = await tool.save({...settings, enabled: false, at: '10:37'});
+    assert.equal(configured.recipient, settings.recipient);
+    assert.equal(await fs.readFile(path.join(state, 'recipient-id'), 'utf8'), settings.recipient + '\n');
+    assert.equal((await fs.stat(path.join(state, 'recipient-id'))).mode & 0o777, 0o600);
     assert.equal((await tool.runNow()).message, '巡检完成');
     assert.equal(runs.length, 1);
     assert.deepEqual(runs[0][2], ['--run-now']);

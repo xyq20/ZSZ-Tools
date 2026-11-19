@@ -55,8 +55,7 @@ def clean_text(value, limit):
     return " ".join(value.split()).translate(str.maketrans("<>", "＜＞"))[:limit]
 
 
-def message(due, age, items, recipient, part, parts):
-    mention = f'<at user_id="{recipient}">小谭</at>' if recipient else "小谭"
+def message(due, age, items, mention, part, parts):
     suffix = f"（{part}/{parts}）" if parts > 1 else ""
     lines = [f"【淘宝商品满 {age} 天提醒】{suffix}", f"{mention}，以下商品于 {due:%Y-%m-%d} 创建满 {age} 天。"]
     for item in items:
@@ -68,9 +67,9 @@ def message(due, age, items, recipient, part, parts):
     return "\n".join(lines)
 
 
-def empty_message(today, product_count):
+def empty_message(today, product_count, mention):
     return (
-        f"【淘宝商品巡检】\n{today:%Y-%m-%d} 已巡检 {product_count} 件近期创建的商品。\n"
+        f"【淘宝商品巡检】\n{mention}，{today:%Y-%m-%d} 已巡检 {product_count} 件近期创建的商品。\n"
         "本次没有需要发送的满 7 天或满 15 天提醒。"
     )
 
@@ -121,14 +120,14 @@ def open_ledger():
     return db
 
 
-def send_empty_notice(db, webhook, today, product_count):
+def send_empty_notice(db, webhook, today, content):
     day = today.isoformat()
     with db:
         inserted = db.execute("INSERT OR IGNORE INTO empty_notice_pending VALUES (?)", (day,))
     if inserted.rowcount == 0:
         raise RuntimeError("今天的无到期提醒通知发送结果待核实，请先核对飞书群消息")
     try:
-        send_webhook(webhook, empty_message(today, product_count))
+        send_webhook(webhook, content)
     except WebhookRejected:
         with db:
             db.execute("DELETE FROM empty_notice_pending WHERE notice_day = ?", (day,))
@@ -175,36 +174,41 @@ def run(db, args, today):
     if not args.dry_run and db.execute("SELECT 1 FROM delivery WHERE state='sending'").fetchone():
         raise RuntimeError("有发送结果待核实的飞书提醒，请先核对群消息和本地发送记录")
 
-    if not args.dry_run and not progress:
-        with db:
-            db.execute("INSERT INTO progress VALUES (?)", ((today - timedelta(days=1)).isoformat(),))
-
-    products = read_products(today - timedelta(days=MAX_PRODUCT_AGE_DAYS), args.fixture)
-    recorded = {(row[0], row[1]) for row in db.execute("SELECT item_id, age FROM delivery")}
-    groups = due_groups(products, first_day, today, recorded)
     recipient_path = LOCAL / "recipient-id"
     recipient = args.settings.get("recipient")
     if recipient is None:
         recipient = recipient_path.read_text(encoding="utf-8").strip() if recipient_path.is_file() else ""
-    if groups and recipient and (recipient == "all" or not re.fullmatch(r"[A-Za-z0-9_\-]+", recipient)):
+    if recipient and (recipient.lower() == "all" or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", recipient)):
         raise ValueError("小谭的飞书用户 ID 格式不正确")
+    mention = "@小谭"
     if not args.dry_run:
+        if not recipient:
+            raise ValueError("请先配置小谭的飞书用户 ID")
+        mention = f'<at user_id="{recipient}">小谭</at>'
         webhook = args.settings.get("webhook")
         if webhook is None:
             webhook = (LOCAL / "webhook").read_text(encoding="utf-8").strip()
         if not re.fullmatch(r"https://open\.feishu\.cn/open-apis/bot/v2/hook/[0-9a-f-]+", webhook):
             raise ValueError("飞书 Webhook 地址格式不正确")
+        if not progress:
+            with db:
+                db.execute("INSERT INTO progress VALUES (?)", ((today - timedelta(days=1)).isoformat(),))
+
+    products = read_products(today - timedelta(days=MAX_PRODUCT_AGE_DAYS), args.fixture)
+    recorded = {(row[0], row[1]) for row in db.execute("SELECT item_id, age FROM delivery")}
+    groups = due_groups(products, first_day, today, recorded)
 
     if not groups:
+        content = empty_message(today, len(products), mention)
         if args.dry_run:
-            print(empty_message(today, len(products)), end="\n\n")
+            print(content, end="\n\n")
         else:
-            send_empty_notice(db, webhook, today, len(products))
+            send_empty_notice(db, webhook, today, content)
 
     for (due, age), items in groups:
         batches = [items[i:i + 10] for i in range(0, len(items), 10)]
         for part, batch in enumerate(batches, 1):
-            content = message(due, age, batch, recipient, part, len(batches))
+            content = message(due, age, batch, mention, part, len(batches))
             if args.dry_run:
                 print(content, end="\n\n")
                 continue

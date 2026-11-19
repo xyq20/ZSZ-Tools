@@ -102,7 +102,7 @@
 <section id="taobao-reminders" hidden>
   <h1>淘宝商品提醒（谭）</h1>
   <p>NEIGBORL 钊叔制 · 千牛商品创建满 7 天、满 15 天，各提醒一次。</p>
-  <p class="notice">「立即运行」会打开浏览器巡检，并将结果发送到飞书群。没有到期商品时也会发一条通知。</p>
+  <p class="notice">「立即运行」会打开浏览器巡检。每次巡检完成后，飞书机器人都会发结果并 @小谭。</p>
   <div class="toolbar">
     <button id="taobao-reminders-login" data-job>扫码登录千牛</button>
     <button id="taobao-reminders-preview" data-job>预览待发提醒</button>
@@ -112,7 +112,7 @@
     <div class="form">
       <label>北京时间<input id="taobao-reminders-at" type="time" value="09:05" required data-job></label>
       <label>飞书机器人 Webhook<input id="taobao-reminders-webhook" type="password" autocomplete="off" maxlength="180" placeholder="仅加密保存在本机" data-job></label>
-      <label>小谭飞书用户 ID（选填）<input id="taobao-reminders-recipient" type="text" maxlength="100" autocomplete="off" data-job></label>
+      <label>小谭飞书用户 ID<input id="taobao-reminders-recipient" type="text" maxlength="100" placeholder="Open ID（ou_ 开头）或 User ID" autocomplete="off" data-job></label>
       <label><span><input id="taobao-reminders-enabled" type="checkbox" data-job> 启用本机定时</span></label>
       <button type="submit" data-job>保存设置</button>
     </div>

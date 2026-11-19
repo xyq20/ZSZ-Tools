@@ -30,8 +30,8 @@ function parseSettings(value, previous = INITIAL) {
   if ((webhook && !WEBHOOK.test(webhook)) || (value.enabled && !webhook)) {
     throw Error('请输入有效的飞书自定义机器人 Webhook');
   }
-  if (recipient && (!/^[a-zA-Z0-9_-]{1,100}$/.test(recipient) || recipient === 'all')) {
-    throw Error('请输入有效的小谭飞书用户 ID，或留空');
+  if (recipient && (!/^[a-zA-Z0-9_-]{1,100}$/.test(recipient) || recipient.toLowerCase() === 'all')) {
+    throw Error('请输入有效的小谭飞书用户 ID');
   }
   return {at: value.at, enabled: value.enabled, webhook, recipient};
 }
@@ -75,6 +75,7 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   const authFile = path.join(stateDir, 'qianniu-auth.json');
   const nativeTimeFile = path.join(stateDir, 'schedule-time');
   const nativeWebhookFile = path.join(stateDir, 'webhook');
+  const nativeRecipientFile = path.join(stateDir, 'recipient-id');
   const scripts = app.isPackaged ? path.join(process.resourcesPath, 'taobao-reminders-python') :
     path.join(__dirname, 'taobao-reminders-python');
   const python = runtimePaths(app).python;
@@ -97,14 +98,16 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
 
   function status() {
     let at = config.at;
+    let recipient = config.recipient;
     if (nativeAgent) {
       at = fs.existsSync(nativeTimeFile) ? fs.readFileSync(nativeTimeFile, 'utf8').trim() : INITIAL.at;
       if (!CLOCK.test(at)) at = INITIAL.at;
+      recipient = fs.existsSync(nativeRecipientFile) ? fs.readFileSync(nativeRecipientFile, 'utf8').trim() : '';
     }
     return {
       enabled: !nativeAgent && config.enabled, at,
       hasWebhook: nativeAgent ? fs.existsSync(nativeWebhookFile) : Boolean(config.webhook),
-      recipient: config.recipient, hasLogin: fs.existsSync(authFile), nativeAgent,
+      recipient, hasLogin: fs.existsSync(authFile), nativeAgent,
       message: configError || lastResult,
     };
   }
@@ -146,10 +149,12 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       const next = parseSettings(value, config);
       if (next.enabled && nativeAgent) throw Error('此 Mac 已有独立巡检程序，避免开启第二个定时');
       if (nativeAgent) {
+        await writePrivateFile(nativeRecipientFile, next.recipient + '\n');
         await writePrivateFile(nativeTimeFile, next.at + '\n');
         return status();
       }
       if (next.enabled && !fs.existsSync(authFile)) throw Error('请先扫码登录千牛');
+      if (next.enabled && !next.recipient) throw Error('请先配置小谭的飞书用户 ID');
       if (!safeStorage.isEncryptionAvailable()) throw Error('无法使用本机系统加密，请检查系统凭证设置');
       await fsp.mkdir(directory, {recursive: true, mode: 0o700});
       await writePrivateFile(configFile, safeStorage.encryptString(JSON.stringify(next)));
@@ -171,10 +176,11 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       return {...status(), message};
     },
     async runNow() {
-      const {hasLogin, hasWebhook} = status();
+      const {hasLogin, hasWebhook, recipient} = status();
       if (!hasLogin) throw Error('请先扫码登录千牛');
       if (!nativeAgent && configError) throw Error(configError);
       if (!hasWebhook) throw Error('请先配置飞书机器人 Webhook');
+      if (!recipient) throw Error('请先配置小谭的飞书用户 ID');
       const {day} = beijingClock(now());
       progress('正在查询千牛商品，完成后将发送飞书消息…');
       lastResult = nativeAgent

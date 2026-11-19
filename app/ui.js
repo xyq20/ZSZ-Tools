@@ -209,10 +209,11 @@ function renderReminders(state) {
  reminderField('enabled').disabled = busy || independentReminder;
  reminderField('recipient').value = state.recipient;
  reminderField('webhook').placeholder = state.hasWebhook ? '已加密保存，留空沿用' : '仅加密保存在本机';
- for (const field of ['webhook','recipient','enabled']) reminderField(field).closest('label').hidden = state.nativeAgent;
+ for (const field of ['webhook','enabled']) reminderField(field).closest('label').hidden = state.nativeAgent;
  reminderField('settings').textContent = [
   state.hasLogin ? '已保存千牛登录' : '待扫码登录',
   state.hasWebhook ? '已配置飞书机器人' : '未配置飞书机器人',
+  state.recipient ? '已配置 @小谭' : '待配置小谭的飞书用户 ID',
   state.nativeAgent ? `独立巡检时间 ${state.at}` : state.enabled ? `工具箱每天 ${state.at} 巡检` : '工具箱定时未启用',
  ].filter(Boolean).join(' · ');
  statusFor('taobao-reminders').textContent = state.message || '';
