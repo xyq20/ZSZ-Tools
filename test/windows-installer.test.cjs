@@ -10,8 +10,10 @@ test('manual and automatic Windows installs use pre-uninstall cleanup',()=>{
  assert.match(hook,/!macro customCheckAppRunning/);assert.match(hook,/stop-toolkit-processes\.ps1/);assert.match(hook,/SetErrorLevel 2/);
  const update=windowsScript();
  assert.match(update,/WaitForExit\(15000\)/);
- assert.match(update,/Start-Process -FilePath \$Installer -ArgumentList '--updated' -WindowStyle Normal -PassThru/);
- assert.match(update,/\$p\.WaitForExit\(\)/);
+ assert.match(update,/Start-Process -FilePath \$Installer -ArgumentList @\('\/S','--updated'\) -PassThru/);
+ assert.match(update,/\$installerProcess\.WaitForExit\(300000\)/);
+ assert.match(update,/\$installerProcess\.ExitCode -ne 0[\s\S]*Start-Process -FilePath \$AppExe -ArgumentList '--updated'/);
+ assert.match(update,/Test-Path -LiteralPath \$Healthy -PathType Leaf/);
  assert.match(update,/MessageBox\]::Show/);
  const script=fs.readFileSync(path.join(__dirname,'../build/stop-toolkit-processes.ps1'),'utf8');assert(script.startsWith('\ufeff'));
 });
@@ -23,9 +25,12 @@ test('Windows updater hands off only after the installation helper signals readi
   let detached=false;
   child.unref=()=>{detached=true;};
   const token=starts?'successful':'failed';
-  const command=launchHelper({platform:'win32',directory,file:path.join(directory,'installer.exe'),info:{sha256:'abc'},token},(_command,args)=>{
+  const executable=path.join(directory,'钊叔工具箱.exe');
+  const command=launchHelper({platform:'win32',directory,file:path.join(directory,'installer.exe'),info:{sha256:'abc'},token,executable},(_command,args)=>{
    const ready=args[args.indexOf('-Ready')+1];
    assert.equal(ready,path.join(directory,`helper-${token}.ready`));
+   assert.equal(args[args.indexOf('-AppExe')+1],executable);
+   assert.equal(args[args.indexOf('-Healthy')+1],path.join(directory,'healthy'));
    setImmediate(()=>{
     child.emit('spawn');
     if(starts)fs.writeFileSync(ready,'ready');
@@ -34,7 +39,7 @@ test('Windows updater hands off only after the installation helper signals readi
    return child;
   });
   if(starts)await command;
-  else await assert.rejects(command,/安装助手未就绪/);
+  else await assert.rejects(command,/更新助手未就绪/);
   assert.equal(detached,starts);
  }
 });

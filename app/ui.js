@@ -52,7 +52,7 @@ window.desktop?.getVersion().then(v=>document.getElementById('app-version').text
 const updateDialog=document.getElementById('update-dialog');
 document.getElementById('close-update').addEventListener('click',()=>updateDialog.close());
 function renderUpdate(r){
- const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'，下载完成后可重启安装。',downloaded:r.message||'下载并校验完成，可重启安装。',installing:r.message||'正在准备安装…'};
+ const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'，下载完成后可重启更新。',downloaded:r.message||'下载并校验完成，可重启更新。',installing:r.message||'正在准备更新…'};
  updateStatus.textContent=messages[r.status]||'请重新检查更新。';
  const notes=document.getElementById('update-notes'),notesDetails=document.getElementById('update-notes-details');
  notes.textContent=r.notes||'';notesDetails.hidden=!r.notes;
@@ -62,7 +62,7 @@ function renderUpdate(r){
  const percent=r.status==='downloading'?Math.min(100,Math.max(0,Number(r.percent)||0)):100;
  document.getElementById('update-progress-bar').value=percent;
  document.getElementById('update-percent').textContent=percent+'%';
- document.getElementById('update-progress-label').textContent=r.status==='downloaded'?'下载完成':r.status==='installing'?'准备安装':'下载进度';
+ document.getElementById('update-progress-label').textContent=r.status==='downloaded'?'下载完成':r.status==='installing'?'准备更新':'下载进度';
  const transferred=r.status==='downloading'?r.bytes:r.size;
  const route=r.network==='system-proxy'?'系统代理':r.network==='direct'?'直连':'';
  document.getElementById('update-transfer-detail').textContent=[r.total||r.size?updateSize(transferred)+' / '+updateSize(r.total||r.size):'',route].filter(Boolean).join(' · ');

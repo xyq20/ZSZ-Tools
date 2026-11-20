@@ -98,28 +98,40 @@ kill -9 "$child" 2>/dev/null || true
 printf '新版启动未完成，已恢复旧版。' > "$ack.failed"
 /usr/bin/open "$target"
 `;}
-function windowsScript(){return `param([int]$ParentPid,[string]$Installer,[string]$Digest,[string]$Log,[string]$Ready)
+function windowsScript(){return `param([int]$ParentPid,[string]$Installer,[string]$Digest,[string]$Log,[string]$Ready,[string]$AppExe,[string]$Healthy)
 $ErrorActionPreference='Stop'
+$oldAppExited=$false
+$installerProcess=$null
+$launchedApp=$null
 try {
  '正在等待旧版工具箱退出' | Set-Content -LiteralPath $Log -Encoding UTF8
  'ready' | Set-Content -LiteralPath $Ready -Encoding ASCII
  $p=Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
- # The installer performs scoped graceful shutdown and residual process cleanup.
- if ($p) { [void]$p.WaitForExit(15000) }
+ if ($p -and -not $p.WaitForExit(15000)) { throw '旧版工具箱未退出，请关闭工具箱后重试' }
+ $oldAppExited=$true
  if ((Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash.ToLower() -ne $Digest) { throw '安装包校验失败' }
- '正在打开 Windows 安装向导' | Add-Content -LiteralPath $Log -Encoding UTF8
- $p=Start-Process -FilePath $Installer -ArgumentList '--updated' -WindowStyle Normal -PassThru
- # Wait only for the installer. Its restarted toolbox can remain open.
- $p.WaitForExit()
- if ($p.ExitCode -ne 0) { throw ('安装失败，退出码：'+$p.ExitCode) }
- '安装器已退出，等待新版工具箱启动确认' | Add-Content -LiteralPath $Log -Encoding UTF8
+ '正在后台应用更新' | Add-Content -LiteralPath $Log -Encoding UTF8
+ $installerProcess=Start-Process -FilePath $Installer -ArgumentList @('/S','--updated') -PassThru
+ if (-not $installerProcess.WaitForExit(300000)) { throw '后台更新仍未结束。请检查 Windows 管理员授权提示' }
+ if ($installerProcess.ExitCode -ne 0) { throw ('后台更新失败，退出码：'+$installerProcess.ExitCode) }
+ '正在启动工具箱并等待新版确认' | Add-Content -LiteralPath $Log -Encoding UTF8
+ $launchedApp=Start-Process -FilePath $AppExe -ArgumentList '--updated' -WindowStyle Normal -PassThru
+ $deadline=(Get-Date).AddSeconds(45)
+ while (-not (Test-Path -LiteralPath $Healthy -PathType Leaf)) {
+  if ($launchedApp.HasExited -or (Get-Date) -ge $deadline) { throw '工具箱未确认新版本已启动，请检查当前版本' }
+  Start-Sleep -Milliseconds 250
+ }
+ '新版工具箱已启动' | Add-Content -LiteralPath $Log -Encoding UTF8
 } catch {
  $reason=$_.Exception.Message
  try { $reason | Add-Content -LiteralPath $Log -Encoding UTF8 } catch { Write-Warning $reason }
+ if ($oldAppExited -and -not $launchedApp -and (-not $installerProcess -or $installerProcess.HasExited)) {
+  try { Start-Process -FilePath $AppExe -WindowStyle Normal } catch {}
+ }
  if (Test-Path -LiteralPath $Ready) {
   try {
    Add-Type -AssemblyName System.Windows.Forms
-   [void][System.Windows.Forms.MessageBox]::Show("$reason\`n可重新下载新版 EXE 并手动覆盖安装。\`n日志：$Log", '钊叔工具箱更新未完成', 'OK', 'Warning')
+   [void][System.Windows.Forms.MessageBox]::Show("$reason\`n日志：$Log", '钊叔工具箱更新未完成', 'OK', 'Warning')
   } catch {}
  }
  exit 1
@@ -132,9 +144,9 @@ async function waitForWindowsHelper(child,ready){
   await delay(100);
  }
  if(child.exitCode===null&&child.signalCode===null)child.kill();
- throw Error('Windows 安装助手未就绪。可下载新版 EXE 手动覆盖安装，或查看更新目录中的 install-helper.log。');
+ throw Error('Windows 更新助手未就绪。请重试或查看更新目录中的 install-helper.log。');
 }
-async function launchHelper({platform,directory,file,info,mac,token},spawnProcess=spawn){
+async function launchHelper({platform,directory,file,info,mac,token,executable},spawnProcess=spawn){
  const log=path.join(directory,'install.log');let command,args,ready;
  if(platform==='darwin'){
   const helper=path.join(directory,'install.sh');await fs.writeFile(helper,macScript(),{mode:0o700});
@@ -142,7 +154,7 @@ async function launchHelper({platform,directory,file,info,mac,token},spawnProces
  }else{
   const helper=path.join(directory,'install.ps1');await fs.writeFile(helper,'\ufeff'+windowsScript(),{mode:0o600});
   ready=path.join(directory,'helper-'+token+'.ready');
-  command=path.join(process.env.SystemRoot||'C:\\Windows','System32/WindowsPowerShell/v1.0/powershell.exe');args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-ParentPid',String(process.pid),'-Installer',file,'-Digest',info.sha256,'-Log',log,'-Ready',ready];
+  command=path.join(process.env.SystemRoot||'C:\\Windows','System32/WindowsPowerShell/v1.0/powershell.exe');args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-ParentPid',String(process.pid),'-Installer',file,'-Digest',info.sha256,'-Log',log,'-Ready',ready,'-AppExe',executable,'-Healthy',path.join(directory,'healthy')];
  }
  const handle=await fs.open(ready?path.join(directory,'install-helper.log'):log,'a',0o600);
  try{
@@ -173,7 +185,7 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
     file=path.join(directory,platform==='darwin'?'installer.dmg':'installer.exe');
     let cached=false;try{await verifyFile(file,info);cached=true;}catch{}
     if(!cached)await downloader(info,file,{signal:controller.signal,onProgress:(bytes,total)=>emit({percent:Math.floor(bytes/total*100),bytes,total})});
-    return emit({status:'downloaded',percent:100,message:'下载并校验完成，可在空闲时重启安装。'});
+    return emit({status:'downloaded',percent:100,message:'下载并校验完成。请保存当前工作，然后点击「重启更新」。'});
    }catch(e){return emit({status:'available',message:controller.signal.aborted?'下载已取消，可重新下载。':e.message,percent:0});}
    finally{controller=null;}
   });},
@@ -184,21 +196,22 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
    if(business.isBusy())throw Error('任务正在执行，请完成后再重启更新');
    if(!await confirm())return {...state};
    // Reserve the business gate before any asynchronous preparation or quit.
-   business.beginUpdate();emit({status:'installing',message:'正在准备安装，请稍候…'});
+   business.beginUpdate();emit({status:'installing',message:'正在准备更新，请稍候…'});
    let mac;
    try{
     await verifyFile(file,info);
     const token=crypto.randomBytes(16).toString('hex');
+    const executable=app.getPath('exe');
     await fs.rm(path.join(directory,'healthy'),{force:true});await fs.rm(path.join(directory,'healthy.failed'),{force:true});
-    if(platform==='darwin')mac=await prepare({file,directory,version:info.latest,executable:app.getPath('exe'),token});
+    if(platform==='darwin')mac=await prepare({file,directory,version:info.latest,executable,token});
     else if(platform!=='win32')throw Error('当前系统暂不支持自动安装');
     emit({message:'正在保存本机登录状态…'});
     await business.flushLogin();
     await fs.writeFile(path.join(root,'pending.json'),JSON.stringify({version:info.latest,directory,token}),{mode:0o600});
-    if(platform==='win32')emit({message:'正在启动 Windows 安装向导，请按安装窗口的提示继续…'});
-    await launch({platform,directory,file,info,mac,token});
+    if(platform==='win32')emit({message:'工具箱即将关闭，后台更新完成后会自动打开…'});
+    await launch({platform,directory,file,info,mac,token,executable});
     canQuit=true;app.quit();return {...state};
-   }catch(e){if(mac)await fs.rm(mac.staged,{recursive:true,force:true});business.endUpdate();emit({status:'downloaded',message:'安装未启动：'+e.message});throw e;}
+   }catch(e){if(mac)await fs.rm(mac.staged,{recursive:true,force:true});business.endUpdate();emit({status:'downloaded',message:'更新未启动：'+e.message});throw e;}
   });},
  };
 }

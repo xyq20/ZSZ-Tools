@@ -30,7 +30,7 @@ business=require('./business/desktop.cjs').setupBusiness(win,app);
 const updateNetwork=createUpdateNetwork(require('electron').session.fromPartition('toolkit-updates'));
 updater=createUpdater({app,manifestUrl:updateConfig.manifestUrl,business,fetchRelease:updateNetwork.manifest,getNetworkRoute:updateNetwork.route,downloader:(info,file,options)=>downloadFile(info,file,{...options,getResponse:updateNetwork.response}),
  notify:data=>{if(!win.isDestroyed())win.webContents.send('update-progress',data);},
- confirm:async()=>{const r=await dialog.showMessageBox(win,{type:'question',buttons:['稍后','重启并安装'],defaultId:0,cancelId:0,message:'重启并安装新版工具箱？',detail:'登录和配置会保留。尚未保存的预览结果需要重新查询；尚未发布的淘宝批次请先处理完毕。'});return r.response===1;}
+ confirm:async()=>{if(process.platform==='win32')return true;const r=await dialog.showMessageBox(win,{type:'question',buttons:['稍后','重启更新'],defaultId:0,cancelId:0,message:'现在重启工具箱并更新？',detail:'请先保存预览结果，并处理尚未发布的淘宝批次。登录和配置会保留。'});return r.response===1;}
 });
 win.on('close',e=>{if(updater.isInstalling()&&!updater.canQuit())e.preventDefault();});
 win.webContents.once('did-finish-load',()=>acknowledgeUpdate(app));
