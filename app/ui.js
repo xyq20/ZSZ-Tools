@@ -208,7 +208,7 @@ function renderReminders(state) {
  reminderField('enabled').checked = state.enabled;
  reminderField('enabled').disabled = busy || independentReminder;
  reminderField('recipient').value = state.recipient;
- reminderField('webhook').placeholder = state.hasWebhook ? '已加密保存，留空沿用' : '仅加密保存在本机';
+ reminderField('webhook').placeholder = state.hasWebhook ? '已配置，留空沿用' : '仅加密保存在本机';
  for (const field of ['webhook','enabled']) reminderField(field).closest('label').hidden = state.nativeAgent;
  reminderField('settings').textContent = [
   state.hasLogin ? '已保存千牛登录' : '待扫码登录',

@@ -4,8 +4,8 @@ const {spawn}=require('node:child_process');
 const ExcelJS=require('exceljs');
 const {centerWorkbook}=require('./workbook-style.cjs');
 
-function runtimePaths(app){
- const root=app.isPackaged?process.resourcesPath:path.resolve(__dirname,'..');
+function runtimePaths(app,resourcesPath=process.resourcesPath){
+ const root=app.isPackaged?resourcesPath:path.resolve(__dirname,'..');
  const runtime=app.isPackaged?path.join(root,'python'):path.join(root,'runtimes',`${process.platform==='darwin'?'mac':'win'}-${process.arch}`);
  return {python:process.platform==='win32'?path.join(runtime,'python.exe'):path.join(runtime,'bin/python3.12'),bridge:path.join(app.isPackaged?root:__dirname,'monthly-python/bridge.py')};
 }

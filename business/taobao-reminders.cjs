@@ -12,6 +12,7 @@ const BEIJING = new Intl.DateTimeFormat('sv-SE', {
   hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 });
 const INITIAL = {at: '09:05', enabled: false, webhook: '', recipient: ''};
+const DEFAULTS_FILE = 'taobao-reminders-defaults.json';
 const RETRY_MS = 15 * 60_000;
 
 function beijingClock(now) {
@@ -19,14 +20,14 @@ function beijingClock(now) {
   return {day, clock};
 }
 
-function parseSettings(value, previous = INITIAL) {
+function parseSettings(value, previous = INITIAL, defaults = INITIAL) {
   if (!value || typeof value !== 'object' || typeof value.at !== 'string' ||
       !CLOCK.test(value.at) || typeof value.enabled !== 'boolean' ||
       typeof value.webhook !== 'string' || typeof value.recipient !== 'string') {
     throw Error('请输入有效的北京时间和提醒配置');
   }
-  const webhook = value.webhook.trim() || previous.webhook;
-  const recipient = value.recipient.trim();
+  const webhook = value.webhook.trim() || previous.webhook || defaults.webhook;
+  const recipient = value.recipient.trim() || defaults.recipient;
   if ((webhook && !WEBHOOK.test(webhook)) || (value.enabled && !webhook)) {
     throw Error('请输入有效的飞书自定义机器人 Webhook');
   }
@@ -34,6 +35,12 @@ function parseSettings(value, previous = INITIAL) {
     throw Error('请输入有效的小谭飞书用户 ID');
   }
   return {at: value.at, enabled: value.enabled, webhook, recipient};
+}
+
+function feishuDefaults({webhook, recipient}) {
+  const settings = parseSettings({...INITIAL, enabled: true, webhook, recipient});
+  if (!settings.recipient) throw Error('缺少小谭的飞书用户 ID');
+  return {webhook: settings.webhook, recipient: settings.recipient};
 }
 
 function runPython(python, script, flags, env, settings) {
@@ -64,7 +71,7 @@ async function writePrivateFile(file, contents) {
 }
 
 function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, runner = runPython,
-  browserFinder = browserPath, now = () => new Date()}) {
+  browserFinder = browserPath, now = () => new Date(), resourcesPath = process.resourcesPath}) {
   const directory = path.join(app.getPath('userData'), 'taobao-reminders');
   const configFile = path.join(directory, 'settings.bin');
   const legacyRoot = path.join(app.getPath('home'), 'Library', 'Application Support', 'TaobaoProductReminders');
@@ -76,10 +83,11 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   const nativeTimeFile = path.join(stateDir, 'schedule-time');
   const nativeWebhookFile = path.join(stateDir, 'webhook');
   const nativeRecipientFile = path.join(stateDir, 'recipient-id');
-  const scripts = app.isPackaged ? path.join(process.resourcesPath, 'taobao-reminders-python') :
+  const scripts = app.isPackaged ? path.join(resourcesPath, 'taobao-reminders-python') :
     path.join(__dirname, 'taobao-reminders-python');
-  const python = runtimePaths(app).python;
+  const python = runtimePaths(app, resourcesPath).python;
   let config = INITIAL;
+  let defaults = INITIAL;
   let configError = '';
   let lastResult = '';
   let completedDay = '';
@@ -87,10 +95,22 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   let active = false;
   let stopped = false;
 
+  if (app.isPackaged) {
+    const file = path.join(resourcesPath, DEFAULTS_FILE);
+    try {
+      if (fs.existsSync(file)) {
+        defaults = feishuDefaults(JSON.parse(fs.readFileSync(file, 'utf8')));
+        config = {...INITIAL, ...defaults};
+      }
+    } catch {
+      configError = '内置飞书配置无法读取，请重新安装内部版或手动保存配置';
+    }
+  }
   try {
     if (fs.existsSync(configFile)) {
       if (!safeStorage.isEncryptionAvailable()) throw Error('无法使用系统加密');
-      config = parseSettings(JSON.parse(safeStorage.decryptString(fs.readFileSync(configFile))));
+      config = parseSettings(JSON.parse(safeStorage.decryptString(fs.readFileSync(configFile))), INITIAL, defaults);
+      configError = '';
     }
   } catch {
     configError = '本机提醒配置无法读取，请重新保存配置';
@@ -102,11 +122,11 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
     if (nativeAgent) {
       at = fs.existsSync(nativeTimeFile) ? fs.readFileSync(nativeTimeFile, 'utf8').trim() : INITIAL.at;
       if (!CLOCK.test(at)) at = INITIAL.at;
-      recipient = fs.existsSync(nativeRecipientFile) ? fs.readFileSync(nativeRecipientFile, 'utf8').trim() : '';
+      recipient = (fs.existsSync(nativeRecipientFile) ? fs.readFileSync(nativeRecipientFile, 'utf8').trim() : '') || defaults.recipient;
     }
     return {
       enabled: !nativeAgent && config.enabled, at,
-      hasWebhook: nativeAgent ? fs.existsSync(nativeWebhookFile) : Boolean(config.webhook),
+      hasWebhook: nativeAgent ? fs.existsSync(nativeWebhookFile) || Boolean(defaults.webhook) : Boolean(config.webhook),
       recipient, hasLogin: fs.existsSync(authFile), nativeAgent,
       message: configError || lastResult,
     };
@@ -146,7 +166,7 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   return {
     status,
     async save(value) {
-      const next = parseSettings(value, config);
+      const next = parseSettings(value, config, defaults);
       if (next.enabled && nativeAgent) throw Error('此 Mac 已有独立巡检程序，避免开启第二个定时');
       if (nativeAgent) {
         await writePrivateFile(nativeRecipientFile, next.recipient + '\n');
@@ -184,7 +204,9 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       const {day} = beijingClock(now());
       progress('正在查询千牛商品，完成后将发送飞书消息…');
       lastResult = nativeAgent
-        ? await execute('remind.py', ['--run-now'])
+        ? await execute('remind.py', ['--run-now', '--settings-stdin'], {
+          webhook: fs.existsSync(nativeWebhookFile) ? null : defaults.webhook, recipient,
+        })
         : await execute('remind.py', ['--run-now', '--settings-stdin'], {
           webhook: config.webhook, recipient: config.recipient,
         });
@@ -196,4 +218,4 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   };
 }
 
-module.exports = {createTaobaoReminders, beijingClock, parseSettings};
+module.exports = {createTaobaoReminders, beijingClock, parseSettings, feishuDefaults, DEFAULTS_FILE};

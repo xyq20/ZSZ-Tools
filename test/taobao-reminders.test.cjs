@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {runtimePaths} = require('../business/monthly.cjs');
-const {beijingClock, parseSettings, createTaobaoReminders} = require('../business/taobao-reminders.cjs');
+const {beijingClock, parseSettings, createTaobaoReminders, DEFAULTS_FILE} = require('../business/taobao-reminders.cjs');
 
 const webhook = 'https://open.feishu.cn/open-apis/bot/v2/hook/00000000-0000-0000-0000-000000000000';
 const settings = {at: '09:05', enabled: true, webhook, recipient: 'ou_fixture'};
@@ -75,6 +75,43 @@ test('toolbox schedule is opt-in, shares no secret with renderer, and preview ca
   assert.deepEqual(args[2][4], {webhook, recipient: settings.recipient});
 });
 
+test('internal defaults work without saved settings and allow local overrides', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'taobao-reminders-defaults-'));
+  t.after(() => fs.rm(root, {recursive: true, force: true}));
+  const directory = path.join(root, 'taobao-reminders');
+  await fs.mkdir(directory);
+  await fs.writeFile(path.join(directory, 'qianniu-auth.json'), '{}');
+  await fs.writeFile(path.join(root, DEFAULTS_FILE), JSON.stringify({webhook, recipient: settings.recipient}));
+
+  const sent = [];
+  const options = {
+    app: {isPackaged: true, getPath: () => root}, resourcesPath: root,
+    safeStorage: {isEncryptionAvailable: () => true, encryptString: Buffer.from,
+      decryptString: value => value.toString()},
+    progress: () => {}, exclusive: fn => fn(), blocked: () => false,
+    browserFinder: () => 'chrome', runner: async (...args) => {sent.push(args[4]); return '巡检完成';},
+  };
+  const config = path.join(directory, 'settings.bin');
+  const preset = {webhook, recipient: settings.recipient};
+  const local = {webhook: webhook.replace(/0000$/, '0001'), recipient: 'ou_local'};
+
+  for (const saved of [null, {webhook: '', recipient: ''}, local]) {
+    if (saved) await fs.writeFile(config, JSON.stringify({...settings, enabled: false, ...saved}));
+    const tool = createTaobaoReminders(options);
+    try {
+      const expected = saved === local ? local : preset;
+      assert.equal(tool.status().enabled, false);
+      assert.equal(tool.status().hasWebhook, true);
+      assert.equal(tool.status().recipient, expected.recipient);
+      assert.equal('webhook' in tool.status(), false);
+      await tool.runNow();
+      assert.deepEqual(sent.at(-1), expected);
+    } finally {
+      tool.stop();
+    }
+  }
+});
+
 test('existing Mac background service reads the time set in the toolbox without a second schedule',
   {skip: process.platform !== 'darwin'}, async t => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'taobao-native-reminders-'));
@@ -109,7 +146,7 @@ test('existing Mac background service reads the time set in the toolbox without 
     assert.equal((await fs.stat(path.join(state, 'recipient-id'))).mode & 0o777, 0o600);
     assert.equal((await tool.runNow()).message, '巡检完成');
     assert.equal(runs.length, 1);
-    assert.deepEqual(runs[0][2], ['--run-now']);
+    assert.deepEqual(runs[0][2], ['--run-now', '--settings-stdin']);
     assert.equal(runs[0][3].TAOBAO_REMINDER_STATE_DIR, state);
-    assert.equal(runs[0][4], undefined);
+    assert.deepEqual(runs[0][4], {webhook: null, recipient: settings.recipient});
   });

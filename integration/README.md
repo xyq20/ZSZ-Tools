@@ -56,6 +56,8 @@
 
 工具箱定时在应用进程内按北京时间运行，首次启用前需扫码、保存 Webhook、小谭的飞书用户 ID 和巡检时间。「立即运行」打开可见浏览器巡检，每次发结果并 @小谭，包括查无到期商品的情况。预览只展示消息。设置、网页登录和去重记录位于本机的 `team-toolkit/taobao-reminders`。装有原独立巡检的 Mac 手动运行时沿用其登录、Webhook 和去重记录，页面保存的飞书用户 ID 与时间也供独立后台进程读取。
 
+内部打包时设置 `TOOLKIT_INTERNAL_TAOBAO_STATE_DIR` 为含 `webhook` 和 `recipient-id` 的本机配置目录。两项作为应用资源内置，扫码登录后即可手动运行。已有本机配置优先。普通打包不设置该变量，安装包不会内置这两项。
+
 ## 自动库存填写（三公）
 
 业务源码位于 `Documents/ChatGPT/自动库存填写`，来源登记为 `taobao-stock`。库存匹配、Excel 黄色库存解析、任务状态、报告和安全执行引擎从该项目按文件白名单同步到 `business/taobao-stock`；Electron 接入和面板由工具箱维护。运行时复用工具箱内置 Python、Playwright 与 openpyxl。
