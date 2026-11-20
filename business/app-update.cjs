@@ -7,6 +7,7 @@ const {pipeline}=require('node:stream/promises');
 const {Transform}=require('node:stream');
 const {execFile,spawn}=require('node:child_process');
 const {promisify}=require('node:util');
+const {setTimeout:delay}=require('node:timers/promises');
 const exec=promisify(execFile);
 const {fetchManifest,evaluateManifest}=require('../updater.cjs');
 const REPO='/xyq20/ZSZ-Tools/releases/download/';
@@ -97,31 +98,58 @@ kill -9 "$child" 2>/dev/null || true
 printf '新版启动未完成，已恢复旧版。' > "$ack.failed"
 /usr/bin/open "$target"
 `;}
-function windowsScript(){return `param([int]$ParentPid,[string]$Installer,[string]$Digest,[string]$Log)
+function windowsScript(){return `param([int]$ParentPid,[string]$Installer,[string]$Digest,[string]$Log,[string]$Ready)
 $ErrorActionPreference='Stop'
 try {
+ '正在等待旧版工具箱退出' | Set-Content -LiteralPath $Log -Encoding UTF8
+ 'ready' | Set-Content -LiteralPath $Ready -Encoding ASCII
  $p=Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
  # The installer performs scoped graceful shutdown and residual process cleanup.
  if ($p) { [void]$p.WaitForExit(15000) }
  if ((Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash.ToLower() -ne $Digest) { throw '安装包校验失败' }
- $p=Start-Process -FilePath $Installer -ArgumentList @('/S','--updated','--force-run') -Wait -PassThru
+ '正在打开 Windows 安装向导' | Add-Content -LiteralPath $Log -Encoding UTF8
+ $p=Start-Process -FilePath $Installer -ArgumentList '--updated' -WindowStyle Normal -PassThru
+ # Wait only for the installer. Its restarted toolbox can remain open.
+ $p.WaitForExit()
  if ($p.ExitCode -ne 0) { throw ('安装失败，退出码：'+$p.ExitCode) }
- '安装完成' | Set-Content -LiteralPath $Log -Encoding UTF8
-} catch { $_.Exception.Message | Set-Content -LiteralPath $Log -Encoding UTF8; exit 1 }
+ '安装器已退出，等待新版工具箱启动确认' | Add-Content -LiteralPath $Log -Encoding UTF8
+} catch {
+ $reason=$_.Exception.Message
+ try { $reason | Add-Content -LiteralPath $Log -Encoding UTF8 } catch { Write-Warning $reason }
+ if (Test-Path -LiteralPath $Ready) {
+  try {
+   Add-Type -AssemblyName System.Windows.Forms
+   [void][System.Windows.Forms.MessageBox]::Show("$reason\`n可重新下载新版 EXE 并手动覆盖安装。\`n日志：$Log", '钊叔工具箱更新未完成', 'OK', 'Warning')
+  } catch {}
+ }
+ exit 1
+}
 `;}
-async function launchHelper({platform,directory,file,info,mac,token}){
- const log=path.join(directory,'install.log');let command,args;
+async function waitForWindowsHelper(child,ready){
+ const until=Date.now()+10000;
+ while(child.exitCode===null&&child.signalCode===null&&Date.now()<until){
+  if(await fs.access(ready).then(()=>true,()=>false))return;
+  await delay(100);
+ }
+ if(child.exitCode===null&&child.signalCode===null)child.kill();
+ throw Error('Windows 安装助手未就绪。可下载新版 EXE 手动覆盖安装，或查看更新目录中的 install-helper.log。');
+}
+async function launchHelper({platform,directory,file,info,mac,token},spawnProcess=spawn){
+ const log=path.join(directory,'install.log');let command,args,ready;
  if(platform==='darwin'){
   const helper=path.join(directory,'install.sh');await fs.writeFile(helper,macScript(),{mode:0o700});
   command='/bin/sh';args=[helper,String(process.pid),mac.target,mac.staged,mac.backup,path.join(directory,'healthy'),token,mac.binary];
  }else{
   const helper=path.join(directory,'install.ps1');await fs.writeFile(helper,'\ufeff'+windowsScript(),{mode:0o600});
-  command=path.join(process.env.SystemRoot||'C:\\Windows','System32/WindowsPowerShell/v1.0/powershell.exe');args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-ParentPid',String(process.pid),'-Installer',file,'-Digest',info.sha256,'-Log',log];
+  ready=path.join(directory,'helper-'+token+'.ready');
+  command=path.join(process.env.SystemRoot||'C:\\Windows','System32/WindowsPowerShell/v1.0/powershell.exe');args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-ParentPid',String(process.pid),'-Installer',file,'-Digest',info.sha256,'-Log',log,'-Ready',ready];
  }
- const handle=await fs.open(log,'a',0o600);
+ const handle=await fs.open(ready?path.join(directory,'install-helper.log'):log,'a',0o600);
  try{
-  const child=spawn(command,args,{detached:true,windowsHide:true,stdio:['ignore',handle.fd,handle.fd]});
-  await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});child.unref();
+  const child=spawnProcess(command,args,{detached:true,windowsHide:true,stdio:['ignore',handle.fd,handle.fd]});
+  await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
+  if(ready)await waitForWindowsHelper(child,ready);
+  child.unref();
  }finally{await handle.close();}
 }
 function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>true,platform=process.platform,arch=process.arch,fetchRelease=fetchManifest,getNetworkRoute=async()=>null,downloader=downloadFile,prepare=prepareMac,launch=launchHelper}){
@@ -164,8 +192,10 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
     await fs.rm(path.join(directory,'healthy'),{force:true});await fs.rm(path.join(directory,'healthy.failed'),{force:true});
     if(platform==='darwin')mac=await prepare({file,directory,version:info.latest,executable:app.getPath('exe'),token});
     else if(platform!=='win32')throw Error('当前系统暂不支持自动安装');
+    emit({message:'正在保存本机登录状态…'});
     await business.flushLogin();
     await fs.writeFile(path.join(root,'pending.json'),JSON.stringify({version:info.latest,directory,token}),{mode:0o600});
+    if(platform==='win32')emit({message:'正在启动 Windows 安装向导，请按安装窗口的提示继续…'});
     await launch({platform,directory,file,info,mac,token});
     canQuit=true;app.quit();return {...state};
    }catch(e){if(mac)await fs.rm(mac.staged,{recursive:true,force:true});business.endUpdate();emit({status:'downloaded',message:'安装未启动：'+e.message});throw e;}
