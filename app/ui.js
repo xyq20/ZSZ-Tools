@@ -80,7 +80,7 @@ checkButton.addEventListener('click',async()=>{
 });
 downloadButton.addEventListener('click',async()=>{downloadButton.disabled=true;try{renderUpdate(await window.desktop.downloadUpdate());}catch(e){updateStatus.textContent=e.message;downloadButton.disabled=false;}});
 cancelUpdateButton.addEventListener('click',()=>window.desktop.cancelUpdate().catch(e=>{updateStatus.textContent=e.message;}));
-installButton.addEventListener('click',async()=>{installButton.disabled=true;try{renderUpdate(await window.desktop.installUpdate());}catch(e){updateStatus.textContent=e.message;}finally{installButton.disabled=false;}});
+installButton.addEventListener('click',async()=>{installButton.disabled=true;try{renderUpdate(await window.desktop.installUpdate());}catch(e){updateStatus.textContent=e.message.replace(/^Error invoking remote method 'install-update': Error: /,'');}finally{installButton.disabled=false;}});
 
 let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;

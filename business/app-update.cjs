@@ -1,5 +1,6 @@
 const fs=require('node:fs/promises');
-const {createReadStream,createWriteStream}=require('node:fs');
+const {createWriteStream}=require('node:fs');
+const {verifyFile}=require('./windows-update.cjs');
 const path=require('node:path');
 const https=require('node:https');
 const crypto=require('node:crypto');
@@ -38,11 +39,6 @@ function response(url,signal,redirects=0){
    resolve(res);
   });req.setTimeout(30000,()=>req.destroy(Error('下载超时，请重试')));req.on('error',reject);
  });
-}
-async function verifyFile(file,info){
- const stat=await fs.lstat(file);if(!stat.isFile()||stat.size!==info.size)throw Error('安装包大小校验失败，请重新下载');
- const hash=crypto.createHash('sha256');for await(const chunk of createReadStream(file))hash.update(chunk);
- if(hash.digest('hex')!==info.sha256)throw Error('安装包校验失败，请重新下载');
 }
 async function downloadFile(info,file,{signal,onProgress=()=>{},getResponse=response}={}){
  const partial=file+'.part';await fs.rm(partial,{force:true});
@@ -98,69 +94,37 @@ kill -9 "$child" 2>/dev/null || true
 printf '新版启动未完成，已恢复旧版。' > "$ack.failed"
 /usr/bin/open "$target"
 `;}
-function windowsScript(){return `param([int]$ParentPid,[string]$Installer,[string]$Digest,[string]$Log,[string]$Ready,[string]$AppExe,[string]$Healthy)
-$ErrorActionPreference='Stop'
-$oldAppExited=$false
-$installerProcess=$null
-$launchedApp=$null
-try {
- '正在等待旧版工具箱退出' | Set-Content -LiteralPath $Log -Encoding UTF8
- 'ready' | Set-Content -LiteralPath $Ready -Encoding ASCII
- $p=Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
- if ($p -and -not $p.WaitForExit(15000)) { throw '旧版工具箱未退出，请关闭工具箱后重试' }
- $oldAppExited=$true
- if ((Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash.ToLower() -ne $Digest) { throw '安装包校验失败' }
- '正在后台应用更新' | Add-Content -LiteralPath $Log -Encoding UTF8
- $installerProcess=Start-Process -FilePath $Installer -ArgumentList @('/S','--updated') -PassThru
- if (-not $installerProcess.WaitForExit(300000)) { throw '后台更新仍未结束。请检查 Windows 管理员授权提示' }
- if ($installerProcess.ExitCode -ne 0) { throw ('后台更新失败，退出码：'+$installerProcess.ExitCode) }
- '正在启动工具箱并等待新版确认' | Add-Content -LiteralPath $Log -Encoding UTF8
- $launchedApp=Start-Process -FilePath $AppExe -ArgumentList '--updated' -WindowStyle Normal -PassThru
- $deadline=(Get-Date).AddSeconds(45)
- while (-not (Test-Path -LiteralPath $Healthy -PathType Leaf)) {
-  if ($launchedApp.HasExited -or (Get-Date) -ge $deadline) { throw '工具箱未确认新版本已启动，请检查当前版本' }
-  Start-Sleep -Milliseconds 250
- }
- '新版工具箱已启动' | Add-Content -LiteralPath $Log -Encoding UTF8
-} catch {
- $reason=$_.Exception.Message
- try { $reason | Add-Content -LiteralPath $Log -Encoding UTF8 } catch { Write-Warning $reason }
- if ($oldAppExited -and -not $launchedApp -and (-not $installerProcess -or $installerProcess.HasExited)) {
-  try { Start-Process -FilePath $AppExe -WindowStyle Normal } catch {}
- }
- if (Test-Path -LiteralPath $Ready) {
-  try {
-   Add-Type -AssemblyName System.Windows.Forms
-   [void][System.Windows.Forms.MessageBox]::Show("$reason\`n日志：$Log", '钊叔工具箱更新未完成', 'OK', 'Warning')
-  } catch {}
- }
- exit 1
-}
-`;}
-async function waitForWindowsHelper(child,ready){
+async function waitForWindowsHelper(child,ready,log){
  const until=Date.now()+10000;
  while(child.exitCode===null&&child.signalCode===null&&Date.now()<until){
   if(await fs.access(ready).then(()=>true,()=>false))return;
   await delay(100);
  }
  if(child.exitCode===null&&child.signalCode===null)child.kill();
- throw Error('Windows 更新助手未就绪。请重试或查看更新目录中的 install-helper.log。');
+ const detail=await fs.readFile(log,'utf8').then(text=>text.trim().slice(-500),()=>null);
+ const reason=detail||`启动未确认（退出码 ${child.exitCode??'未知'}）`;
+ throw Error(`Windows 更新助手未就绪：${reason}。日志：${log}`);
 }
-async function launchHelper({platform,directory,file,info,mac,token,executable},spawnProcess=spawn){
+async function launchHelper({platform,directory,file,info,mac,token,executable,windowsNode},spawnProcess=spawn){
  const log=path.join(directory,'install.log');let command,args,ready;
  if(platform==='darwin'){
   const helper=path.join(directory,'install.sh');await fs.writeFile(helper,macScript(),{mode:0o700});
   command='/bin/sh';args=[helper,String(process.pid),mac.target,mac.staged,mac.backup,path.join(directory,'healthy'),token,mac.binary];
  }else{
-  const helper=path.join(directory,'install.ps1');await fs.writeFile(helper,'\ufeff'+windowsScript(),{mode:0o600});
+  const runtime=windowsNode||path.join(process.resourcesPath,'python/Lib/site-packages/playwright/driver/node.exe');
+  command=path.join(directory,'update-node.exe');
+  await fs.copyFile(runtime,command);
+  const helper=path.join(directory,'windows-update.cjs');
+  await fs.writeFile(helper,await fs.readFile(path.join(__dirname,'windows-update.cjs')),{mode:0o600});
   ready=path.join(directory,'helper-'+token+'.ready');
-  command=path.join(process.env.SystemRoot||'C:\\Windows','System32/WindowsPowerShell/v1.0/powershell.exe');args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-ParentPid',String(process.pid),'-Installer',file,'-Digest',info.sha256,'-Log',log,'-Ready',ready,'-AppExe',executable,'-Healthy',path.join(directory,'healthy')];
+  args=[helper,JSON.stringify({parentPid:process.pid,file,info:{size:info.size,sha256:info.sha256},executable,directory,token})];
  }
- const handle=await fs.open(ready?path.join(directory,'install-helper.log'):log,'a',0o600);
+ const helperLog=ready?path.join(directory,'install-helper.log'):log;
+ const handle=await fs.open(helperLog,ready?'w':'a',0o600);
  try{
   const child=spawnProcess(command,args,{detached:true,windowsHide:true,stdio:['ignore',handle.fd,handle.fd]});
   await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
-  if(ready)await waitForWindowsHelper(child,ready);
+  if(ready)await waitForWindowsHelper(child,ready,helperLog);
   child.unref();
  }finally{await handle.close();}
 }
@@ -215,13 +179,18 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
   });},
  };
 }
-async function acknowledgeUpdate(app){
+async function acknowledgeUpdate(app,platform=process.platform){
  const root=path.join(app.getPath('userData'),'updates'),pending=path.join(root,'pending.json');
  try{
   const value=JSON.parse(await fs.readFile(pending,'utf8'));
-  if(value.version!==app.getVersion()||!/^\w{32}$/.test(value.token)||path.dirname(value.directory)!==root)return;
-  if(process.platform==='darwin'&&!process.argv.includes('--toolkit-update-token='+value.token))return;
+  if(!/^\w{32}$/.test(value.token)||path.dirname(value.directory)!==root)return;
+  if(platform==='win32'){
+   const detail=await fs.readFile(path.join(value.directory,'healthy.failed'),'utf8').catch(()=>null);
+   if(detail){await fs.rm(pending,{force:true});return {detail,log:path.join(value.directory,'install.log')};}
+  }
+  if(value.version!==app.getVersion())return;
+  if(platform==='darwin'&&!process.argv.includes('--toolkit-update-token='+value.token))return;
   await fs.writeFile(path.join(value.directory,'healthy'),'ok',{mode:0o600});await fs.rm(pending,{force:true});
  }catch{}
 }
-module.exports={validateAsset,allowedURL,downloadFile,verifyFile,prepareMac,macScript,windowsScript,launchHelper,createUpdater,acknowledgeUpdate};
+module.exports={validateAsset,allowedURL,downloadFile,verifyFile,prepareMac,macScript,launchHelper,createUpdater,acknowledgeUpdate};

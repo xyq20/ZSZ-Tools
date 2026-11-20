@@ -33,7 +33,10 @@ updater=createUpdater({app,manifestUrl:updateConfig.manifestUrl,business,fetchRe
  confirm:async()=>{if(process.platform==='win32')return true;const r=await dialog.showMessageBox(win,{type:'question',buttons:['稍后','重启更新'],defaultId:0,cancelId:0,message:'现在重启工具箱并更新？',detail:'请先保存预览结果，并处理尚未发布的淘宝批次。登录和配置会保留。'});return r.response===1;}
 });
 win.on('close',e=>{if(updater.isInstalling()&&!updater.canQuit())e.preventDefault();});
-win.webContents.once('did-finish-load',()=>acknowledgeUpdate(app));
+win.webContents.once('did-finish-load',async()=>{
+ const failure=await acknowledgeUpdate(app);
+ if(failure&&!win.isDestroyed())await dialog.showMessageBox(win,{type:'error',message:'工具箱更新未完成',detail:`${failure.detail}\n日志：${failure.log}`});
+});
 win.removeMenu();win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault());win.loadFile(path.join(__dirname,'app/index.html'));
 ipcMain.handle('choose-workbook',async()=>{const r=await dialog.showOpenDialog(win,{title:'选择 Excel 工作簿',buttonLabel:'打开',properties:['openFile'],filters:[{name:'Excel 工作簿',extensions:['xlsx']}]});return r.canceled?null:{name:path.basename(r.filePaths[0])};});
 });
