@@ -3,10 +3,26 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const {spawnSync} = require('node:child_process');
+const {runtimePaths} = require('../business/monthly.cjs');
 const {beijingClock, parseSettings, createTaobaoReminders} = require('../business/taobao-reminders.cjs');
 
 const webhook = 'https://open.feishu.cn/open-apis/bot/v2/hook/00000000-0000-0000-0000-000000000000';
 const settings = {at: '09:05', enabled: true, webhook, recipient: 'ou_fixture'};
+
+test('the reminder entry point finds qianniu under isolated Python', async t => {
+  const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'taobao-reminders-import-'));
+  t.after(() => fs.rm(stateDir, {recursive: true, force: true}));
+  const {python} = runtimePaths({isPackaged: false});
+  const script = path.join(__dirname, '../business/taobao-reminders-python/remind.py');
+  const result = spawnSync(python, ['-I', '-B', '-X', 'utf8', script, '--dry-run'], {
+    cwd: stateDir, env: {...process.env, TAOBAO_REMINDER_STATE_DIR: stateDir},
+    encoding: 'utf8', timeout: 20_000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr.trim(), '千牛尚未保存登录状态，请运行 python3 qianniu.py 登录');
+});
 
 test('reminder settings accept Beijing time and a Feishu webhook for a single recipient', () => {
   assert.deepEqual(beijingClock(new Date('2026-11-18T16:05Z')), {day: '2026-11-19', clock: '00:05'});

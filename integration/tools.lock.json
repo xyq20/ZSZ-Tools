@@ -182,7 +182,7 @@
     },
     "taobao-reminders": {
       "source": "../../../Documents/ChatGPT/淘宝7天提醒（谭）",
-      "commit": "086553eb6634479b27c78b85de30e7f8739a3377",
+      "commit": "4019cf3ae4e52d66d7b3c485a30f6685da096bb0",
       "dirty": false,
       "files": {
         "qianniu.py": {
@@ -191,7 +191,7 @@
         },
         "remind.py": {
           "target": "business/taobao-reminders-python/remind.py",
-          "sha256": "82e59075bad781d13078e68ff9edff9f054407ed4e54ebf41cc687585568a416"
+          "sha256": "1c80e332c919ca218d44b7f1725df13a50f139d3baed3f8102311da9f99c6503"
         }
       }
     },

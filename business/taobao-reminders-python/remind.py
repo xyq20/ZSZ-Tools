@@ -15,6 +15,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
 
+# Windows embedded Python's ._pth omits the entry script's directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 LOCAL = Path(os.environ.get("TAOBAO_REMINDER_STATE_DIR") or
              Path.home() / "Library" / "Application Support" / "TaobaoProductReminders" / "state")
 BEIJING = ZoneInfo("Asia/Shanghai")
