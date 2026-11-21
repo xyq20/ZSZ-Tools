@@ -29,8 +29,9 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
     async launchBrowser() { launches++; return context; },
     async scanMaterials() { return [current]; },
     async readState() { return {}; },
-    async resolveJobs(_page, jobs) {
-      return jobs.map(entry => ({ ...entry, itemId, title: '核对样例', matchedBy: 'image-color', matchedColor: '棕色' }));
+    async resolveJobs(_page, jobs, options) {
+      assert.equal(options.getModelKey(), 'test-key');
+      return jobs.map(entry => ({ ...entry, itemId, title: '核对样例', matchedBy: 'deepseek', matchReason: '口袋细节吻合' }));
     },
     productKey: () => 'state-record',
     async lockRuntime() { locks++; return async () => { locks--; }; },
@@ -55,6 +56,7 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
       showMessageBox: async () => ({ response: confirm }),
     },
     progress: (_message, snapshot) => { if (snapshot) snapshots.push(snapshot); },
+    getModelKey: () => 'test-key',
     coreLoader: async () => core,
     findBrowser: () => 'fixture',
   });
@@ -67,7 +69,8 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
     ['check', 0, 1, 'active'], ['check', 0, 1, 'active'], ['check', 1, 1, 'active'], ['check', 1, 1, 'done'],
   ]);
   assert.equal(snapshots.find(snapshot => snapshot.stage === 'active' && snapshot.count === 1)?.rows?.[0]?.status,
-    '核对通过（图片颜色：棕色）');
+    '核对通过（DeepSeek）');
+  assert.equal(plan.rows[0].matchReason, '口袋细节吻合');
   const eventsBeforeCancel = snapshots.length;
   assert.equal(await tool.publish(), null);
   assert.equal(snapshots.length, eventsBeforeCancel);

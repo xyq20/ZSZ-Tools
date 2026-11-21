@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.40",
+  "version": "0.4.41",
   "private": true,
   "main": "bootstrap.cjs",
   "scripts": {
@@ -26,7 +26,7 @@
   "build": {
     "appId": "local.team.toolkit",
     "productName": "钊叔工具箱",
-    "afterPack": "scripts/pack-app-resources.cjs",
+    "afterPack": "scripts/pack-taobao-reminder-defaults.cjs",
     "electronLanguages": [
       "zh-CN",
       "zh_CN"

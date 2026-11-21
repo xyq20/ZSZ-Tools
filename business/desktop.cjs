@@ -63,7 +63,11 @@ function setupBusiness(win,app){
  handle('business-taobao-reminders-run-now',()=>exclusive(reminders.runNow));
  const stock=require('./taobao-stock.cjs').createTaobaoStockTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('taobao-stock',message)});
  for(const [action,method] of [['login','login'],['verify-login','verifyLogin'],['choose','choose'],['start','start'],['resume','resume'],['report','openReport']])handle('business-taobao-stock-'+action,(...args)=>exclusive(()=>stock[method](...args)));
- const soutu=require('./taobao-soutu.cjs').createTaobaoSoutuTool({app,win,dialog,shell:require('electron').shell,progress:(message,batch)=>progress('taobao-soutu',message,batch)});
+ const soutu=require('./taobao-soutu.cjs').createTaobaoSoutuTool({
+  app,win,dialog,shell:require('electron').shell,getModelKey:taobao.getModelKey,
+  fetchModel:(url,options)=>session.defaultSession.fetch(url,options),
+  progress:(message,batch)=>progress('taobao-soutu',message,batch)
+ });
  for(const [action,method] of [['login','login'],['choose','choose'],['scan','scan'],['plan','plan'],['publish','publish'],['history','history'],['resolve','resolvePending'],['archive','openArchive']])handle('business-taobao-soutu-'+action,(...args)=>exclusive(()=>soutu[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));

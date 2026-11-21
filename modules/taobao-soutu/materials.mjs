@@ -121,30 +121,13 @@ function readColors(text, searchKey) {
   return (text.replaceAll(searchKey, '').match(titleColorPattern) ?? []).map(label => colorByAlias.get(label));
 }
 
-export function productColors(keyword, title, ocrText) {
-  const searchKey = normalizeSearch(keyword);
-  const ocr = normalizeSearch(ocrText ?? '');
-  return [
-    ...readColors(normalizeSearch(title), searchKey),
-    ...(ocr.includes(searchKey) ? readColors(ocr, searchKey) : []),
-  ];
-}
-
 export function selectProductId({ keyword, color }, products) {
   if (color) {
     const searchKey = normalizeSearch(keyword);
-    const byColor = products.map(product => {
-      const title = normalizeSearch(product.title);
-      const ocr = normalizeSearch(product.ocrText ?? '');
-      return { id: product.id, labels: readColors(title, searchKey), ocrLabels: ocr.includes(searchKey) ? readColors(ocr, searchKey) : [] };
-    });
+    const byColor = products.map(product => ({ id: product.id, labels: readColors(normalizeSearch(product.title), searchKey) }));
     const direct = byColor.filter(product => product.labels.includes(color));
     if (direct.length === 1) return direct[0].id;
-    if (!direct.length) {
-      const recognized = byColor.filter(product => !product.labels.length && product.ocrLabels.includes(color));
-      if (recognized.length === 1) return recognized[0].id;
-    }
-    if (byColor.length === 1 && !byColor[0].labels.length && !byColor[0].ocrLabels.length) return byColor[0].id;
+    if (byColor.length === 1 && !byColor[0].labels.length) return byColor[0].id;
   } else {
     if (products.length === 1) return products[0].id;
     const exact = products.filter(product =>

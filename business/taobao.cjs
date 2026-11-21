@@ -107,6 +107,6 @@ function createTaobaoTool({app,win,dialog,safeStorage,progress}){
   }finally{submitting=false;}
  }
  async function history(){const state=await journal();return Object.values(state.records).sort((a,b)=>b.at.localeCompare(a.at));}
- return {settings,saveKey,login,choose,prepare,publish,history,cleanup:async()=>{if(context){await loginState?.flush();await context.close();}}};
+ return {settings,saveKey,getModelKey:apiKey,login,choose,prepare,publish,history,cleanup:async()=>{if(context){await loginState?.flush();await context.close();}}};
 }
 module.exports={createTaobaoTool,browserPath};

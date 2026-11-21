@@ -173,6 +173,15 @@
 </section><section id="sycm" hidden><h1>生意参谋数据抓取（董卓）</h1><p>登录生意参谋 → 选择分级总表 → 全量刷新数据 → 查看结果副本</p><div class="monthly-help"><details open><summary>使用说明</summary><ol><li>登录生意参谋，保存并关闭 Excel/WPS 中的总表。</li><li>选择总表，点击“开始新一轮”；中断后点击“继续上轮”。</li><li>完成后打开结果文件夹，查看表格和失败记录。</li></ol><p>遇滑块请手动通过。原表不改；续跑沿用上轮模式和筛选范围。</p></details><details><summary>逻辑说明</summary><ul><li>默认刷新粉、紫、黄、蓝商品的全部数据，已有值也更新。</li><li>先匹配名称；同名再核对货号，仍重复取排名最靠前的商品。</li><li>续跑只跳过本轮写入校验成功项；日期、表格或商品范围变化需新开一轮。</li><li>统计和月份命名按北京时间；成功更新的缺失流量渠道留空，失败项保留旧值并报告。</li><li>结果写入本机副本；失败或未处理完不会显示全部完成。</li></ul></details></div><div class="toolbar"><button id="sycm-login" data-job>登录生意参谋</button><button id="sycm-choose" data-job>选择分级总表</button><button id="sycm-start" data-job disabled>开始新一轮</button><button id="sycm-resume" data-job>继续上轮</button><button id="sycm-results" data-job>打开结果文件夹</button></div><div class="form"><label>抓取内容<select id="sycm-mode" data-job><option value="all">全部数据</option><option value="charts">曲线与流量</option><option value="flow">仅流量</option><option value="main-pic">仅主图分析</option></select></label><label>商品底色<select id="sycm-color" data-job><option value="default">粉、紫、黄、蓝（默认）</option><option value="all">全部六种颜色</option></select></label><label>指定商品（可选）<input id="sycm-name" data-job placeholder="多个商品名称用逗号分隔"></label></div><p id="sycm-book">未选择分级总表</p><p id="sycm-progress" role="status" aria-live="polite">首次使用需要手动登录。抓取过程只调用同源接口，滑块由你手动处理。</p><pre id="sycm-log" aria-label="运行日志"></pre></section><section id="taobao-soutu" hidden aria-labelledby="soutu-title">
   <h1 id="soutu-title">千牛搜推素材（小林）</h1>
   <p>选择共享盘的「搜推素材」，勾选本批分组并核对商品。每组图片发布一篇图文。</p>
+  <details>
+    <summary>DeepSeek 图片比对</summary>
+    <p>同名多链接无法唯一匹配时，压缩后的商品图会发送给 DeepSeek。密钥与「淘宝素材上传」共用，保存在本机。</p>
+    <form id="taobao-soutu-model-form" class="form">
+      <label>API 密钥<input id="taobao-soutu-model-key" type="password" autocomplete="off" required data-job></label>
+      <button type="submit" data-job>保存密钥</button>
+    </form>
+    <p id="taobao-soutu-model-status" role="status"></p>
+  </details>
   <div class="toolbar">
     <button id="taobao-soutu-login" data-job>打开千牛 / 登录</button>
     <button id="taobao-soutu-choose" data-job>选择素材目录</button>

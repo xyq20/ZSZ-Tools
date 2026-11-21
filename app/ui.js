@@ -16,6 +16,7 @@ for(const button of document.querySelectorAll('[data-view]'))button.addEventList
  window.scrollTo(0,0);
  if(name==='taobao-reminders')loadReminders();
  if(name==='return-rate')loadReturnRateConfig();
+ if(name==='taobao-soutu')loadSoutuModel();
 });
 const search=document.getElementById('search');
 const ownerFilters=[...document.querySelectorAll('[data-owner-filter]')];
@@ -290,6 +291,32 @@ function soutuField(name) {
   return document.getElementById('taobao-soutu-' + name);
 }
 
+function renderSoutuModel({ hasKey }) {
+  soutuField('model-status').textContent = hasKey ? 'DeepSeek 密钥已配置。' : '尚未配置 DeepSeek 密钥。';
+}
+
+async function loadSoutuModel() {
+  try {
+    renderSoutuModel(await call('taobao-settings'));
+  } catch (error) {
+    soutuField('model-status').textContent = error.message;
+  }
+}
+
+soutuField('model-form').addEventListener('submit', event => {
+  event.preventDefault();
+  void run('taobao-soutu', async () => {
+    const key = soutuField('model-key');
+    try {
+      renderSoutuModel(await call('taobao-save-key', key.value));
+    } catch (error) {
+      soutuField('model-status').textContent = error.message;
+    } finally {
+      key.value = '';
+    }
+  });
+});
+
 let soutuBatchTimer;
 let soutuBatchStarted;
 
@@ -338,7 +365,7 @@ function updateSoutuRows(results) {
   const byKey = new Map(results.map(row => [row.key, row]));
   for (const row of soutuField('rows').rows) {
     const info = byKey.get(row.dataset.key);
-    if (info) row.lastElementChild.textContent = [info.status, info.itemId, info.title, info.error].filter(Boolean).join(' · ');
+    if (info) row.lastElementChild.textContent = [info.status, info.itemId, info.title, info.matchReason, info.error].filter(Boolean).join(' · ');
   }
 }
 

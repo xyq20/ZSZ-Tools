@@ -15,7 +15,8 @@ function loadCore() {
   return bundle;
 }
 
-function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader = loadCore, findBrowser = browserPath }) {
+function createTaobaoSoutuTool({ app, win, dialog, shell, progress, getModelKey, fetchModel,
+  coreLoader = loadCore, findBrowser = browserPath }) {
   const runtime = path.join(app.getPath('userData'), 'taobao-soutu');
   const suggested = process.platform === 'win32' ? '\\\\GONGXIANG\\美工文件\\搜推素材' : defaults.source;
   let source;
@@ -24,13 +25,7 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
   let context;
   let material;
 
-  const config = () => ({
-    ...defaults,
-    source,
-    ...(app.isPackaged && process.platform === 'darwin'
-      ? { ocrExecutable: path.join(process.resourcesPath, 'soutu-ocr') }
-      : {}),
-  });
+  const config = () => ({ ...defaults, source });
 
   async function browser() {
     if (context && material && !material.page.isClosed()) return material;
@@ -136,10 +131,10 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
     const state = await core.readState(runtime);
     const resolved = [];
     const missing = [];
-    const matchedRow = ({ group, itemId, title, matchedColor }) => {
+    const matchedRow = ({ group, itemId, title, matchedBy, matchReason }) => {
       const previous = state[core.productKey(group, itemId)];
-      const status = matchedColor ? `核对通过（图片颜色：${matchedColor}）` : '核对通过';
-      return { key: group.key, itemId, title, status: previous?.status === 'published' ? '已发布，跳过提交' : status };
+      const status = matchedBy === 'deepseek' ? '核对通过（DeepSeek）' : '核对通过';
+      return { key: group.key, itemId, title, matchReason, status: previous?.status === 'published' ? '已发布，跳过提交' : status };
     };
     const missingRow = (group, error) => ({ key: group.key, error: error.message, status: '待核对' });
     for (const [keyword, related] of Map.groupBy(jobs, job => job.group.keyword)) {
@@ -151,10 +146,16 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
           automatic.map(({ group }) => ({ key: group.key, status: '核对中' })));
         let updates;
         try {
-          const matches = await core.resolveJobs(page, automatic, false,
-            (message, stage) => report(`${label} · ${message}`, stage));
+          const unmatched = [];
+          const matches = await core.resolveJobs(page, automatic, {
+            getModelKey,
+            fetchImpl: fetchModel,
+            onStage: (message, stage) => report(`${label} · ${message}`, stage),
+            onUnmatched: ({ group, error }) => unmatched.push(missingRow(group, error)),
+          });
           resolved.push(...matches);
-          updates = matches.map(matchedRow);
+          missing.push(...unmatched);
+          updates = [...matches.map(matchedRow), ...unmatched];
         } catch (error) {
           await page.checkAccess();
           updates = automatic.map(({ group }) => missingRow(group, error));

@@ -2,7 +2,6 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, errors } from 'playwright-core';
-import { recognizeImages } from './ocr.mjs';
 
 export const MATERIAL_URL = 'https://myseller.taobao.com/home.htm/material-center/material-management?tab=recommend';
 export const restrictMessage = '千牛出现安全验证、权限限制或访问频率提示，已暂停本次任务。';
@@ -247,7 +246,7 @@ export class MaterialPage {
     }, `未找到标题包含「${keyword}」的商品，请在浏览器中核对关键词或直接填写商品 ID`);
   }
 
-  async productCandidates(keyword, { ocr = this.config.ocr } = {}) {
+  async productCandidates(keyword) {
     const products = await this.findProducts(keyword);
     if (!products.length) return products;
     for (const frame of this.page.frames()) {
@@ -258,30 +257,7 @@ export class MaterialPage {
         if (await button.isEnabled()) throw new Error(`「${keyword}」的搜索结果还有下一页，请核对后指定商品 ID。`);
       }
     }
-    if (ocr) await this.addOcrText(products);
     return products;
-  }
-
-  async addOcrText(products) {
-    const frames = this.page.frames();
-    const captured = [];
-    try {
-      for (const product of products) {
-        for (const frame of frames) {
-          const row = await this.productRow(frame, product.id);
-          if (!row) continue;
-          const info = await one(row.locator('[class^="ProductCell_container__"]')) ??
-            await one(row.locator('td').first()) ?? row;
-          await info.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }), null, { timeout: 4000 });
-          captured.push({ product, image: await info.screenshot({ scale: 'device', timeout: 4000 }) });
-          break;
-        }
-      }
-      const text = await recognizeImages(captured.map(entry => entry.image), { executable: this.config.ocrExecutable });
-      captured.forEach(({ product }, index) => { product.ocrText = text[index] ?? ''; });
-    } catch (error) {
-      console.warn('OCR 暂不可用，继续核对页面文字和已配置的商品 ID。');
-    }
   }
 
   async productPortraits(products) {
@@ -300,8 +276,15 @@ export class MaterialPage {
         if (!image) continue;
         try {
           await image.scrollIntoViewIfNeeded({ timeout: 1500 });
-          const loaded = await image.evaluate(element => element.complete &&
-            element.naturalWidth >= 48 && element.naturalHeight >= 48, null, { timeout: 1500 });
+          const loaded = await image.evaluate(async element => {
+            if (!element.complete) {
+              await Promise.race([
+                element.decode().catch(() => {}),
+                new Promise(resolve => setTimeout(resolve, 1200)),
+              ]);
+            }
+            return element.complete && element.naturalWidth >= 48 && element.naturalHeight >= 48;
+          }, null, { timeout: 1500 });
           if (loaded) images.set(id, await image.screenshot({ scale: 'device', timeout: 2000 }));
         } catch {
           // An unavailable portrait leaves this candidate unresolved.

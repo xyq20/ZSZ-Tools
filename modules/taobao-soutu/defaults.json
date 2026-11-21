@@ -8,7 +8,6 @@
   "retryDelayMs": 3000,
   "jobDelayMs": 5000,
   "shopText": "",
-  "ocr": true,
   "itemIds": {},
   "selectors": {
     "row": "",

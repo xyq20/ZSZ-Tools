@@ -260,20 +260,20 @@
     },
     "taobao-soutu": {
       "source": "../../../Documents/ChatGPT/搜推素材（小林）",
-      "commit": "3c18f29c5a48dcd16ac4f3a596dda5837fa29930",
+      "commit": "2036d3e76b8a8022e0421bba9b56e1b38910d52c",
       "dirty": false,
       "files": {
         "src/browser.mjs": {
           "target": "modules/taobao-soutu/browser.mjs",
-          "sha256": "d198a933350b81153b2f1c7064bb917116767881854e0ad5f7f3c00f9e3a902f"
+          "sha256": "b60b8b7a74a801d1916bd271a1fa6f9c1936b9e8515d41f69d431ffd25d32ca6"
         },
         "src/materials.mjs": {
           "target": "modules/taobao-soutu/materials.mjs",
-          "sha256": "7283fcf9bdd830004f5004200b2a903c35f7d35e9dc13a36e27c783da0c0b869"
+          "sha256": "44828fe20b30afc4c2d829bd03985971a8ac59353ab296b20b791d79ac6c1f0e"
         },
-        "src/image-color.mjs": {
-          "target": "modules/taobao-soutu/image-color.mjs",
-          "sha256": "972398f3c00c4ecf654efe5bd321419b770877ee93f5e4b886fb1601e482c4e0"
+        "src/deepseek-match.mjs": {
+          "target": "modules/taobao-soutu/deepseek-match.mjs",
+          "sha256": "833d3c6773a6f73c1eedea6a869754850fa7e82de3543fca1a399032085a879b"
         },
         "src/state.mjs": {
           "target": "modules/taobao-soutu/state.mjs",
@@ -281,23 +281,11 @@
         },
         "src/workflow.mjs": {
           "target": "modules/taobao-soutu/workflow.mjs",
-          "sha256": "2d086403c520b3f185735059ec5492d7c5922cd50f3c0f12c4c285893123c1a6"
-        },
-        "src/ocr.mjs": {
-          "target": "modules/taobao-soutu/ocr.mjs",
-          "sha256": "7811bcd21d5b5a76c13989ecedf57de8599221c83a083d1a8b9dc955c55a5ec2"
-        },
-        "src/recognize.m": {
-          "target": "modules/taobao-soutu/recognize.m",
-          "sha256": "d7f34716386fbff3da74b4df09d0f89ba9bd89cbcf43a96603c7029106c1dd43"
-        },
-        "src/recognize.ps1": {
-          "target": "modules/taobao-soutu/recognize.ps1",
-          "sha256": "2607a7d959da14c23d03316b8cfc0c068f310e1516e91440e014b0e55ed5c893"
+          "sha256": "92c4744316ea80ad9a503bc00606e58aff2e7fa8e1cff4be8222d546c144120f"
         },
         "config.example.json": {
           "target": "modules/taobao-soutu/defaults.json",
-          "sha256": "fed73f0786e6148776ac3c27f9e58798be44de011b6ae62a68647df6122681fc"
+          "sha256": "f8d949d4781457c905e34180e3306ff7edaa047ab4b57107a3ad5d3f273577f6"
         }
       }
     },

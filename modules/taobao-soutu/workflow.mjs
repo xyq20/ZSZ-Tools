@@ -2,7 +2,7 @@ import { lstat, mkdir, open, readdir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { COMPLETED_DIRECTORY, prepareImages, productKey, scanMaterials, selectProductId } from './materials.mjs';
-import { groupImageColor, matchProductImageColor, productImageColors } from './image-color.mjs';
+import { matchWithDeepSeek } from './deepseek-match.mjs';
 import { saveState } from './state.mjs';
 
 export const seconds = milliseconds => `${(milliseconds / 1000).toFixed(1)} 秒`;
@@ -30,49 +30,45 @@ export async function lockPublishSource(source) {
   };
 }
 
-export async function resolveJobs(material, jobs, verifyMapped = false, onStage) {
+export async function resolveJobs(material, jobs, {
+  verifyMapped = false, onStage, getModelKey, fetchImpl, onUnmatched,
+} = {}) {
   const resolved = [];
   const byKeyword = Map.groupBy(jobs, ({ group }) => group.keyword);
   for (const [keyword, related] of byKeyword) {
     const needsSearch = verifyMapped || related.some(job => !job.itemId);
     const products = needsSearch
-      ? await material.retry(() => material.productCandidates(keyword, { ocr: verifyMapped && material.config.ocr }), onStage)
+      ? await material.retry(() => material.productCandidates(keyword), onStage)
       : [];
-    let checkedOcr = verifyMapped;
-    let imageColors;
+    let portraits;
     for (const { group, itemId } of related) {
-      if (verifyMapped && itemId && !products.some(product => product.id === itemId)) {
-        throw new Error(`「${group.key}」配置的 ${itemId} 未在商品搜索结果中找到`);
-      }
-      let resolvedId = itemId;
-      let matchedColor;
-      if (!resolvedId) {
-        let match = textMatch(group, products);
-        if (match.error && group.color && products.length && !checkedOcr && material.config.ocr) {
-          onStage?.('正在读取商品图片上的颜色文字');
-          await material.addOcrText(products);
-          checkedOcr = true;
-          await material.checkAccess();
-          match = textMatch(group, products);
+      try {
+        if (verifyMapped && itemId && !products.some(product => product.id === itemId)) {
+          throw new Error(`「${group.key}」配置的 ${itemId} 未在商品搜索结果中找到`);
         }
-        resolvedId = match.itemId;
-        if (!resolvedId && products.length > 1) {
-          onStage?.(`${group.key} · 正在比对商品主图和素材颜色`);
-          const color = await groupImageColor(group);
-          if (!color) throw new Error(`分组图片颜色未能互相印证。 ${match.error.message}`, { cause: match.error });
-          imageColors ??= await productImageColors(await material.productPortraits(products));
-          resolvedId = matchProductImageColor({ keyword, color }, products, imageColors);
-          if (!resolvedId) {
-            const reason = imageColors.size < products.length ? '有候选主图无法读取' : '图片颜色无法唯一匹配';
-            throw new Error(`${reason}。 ${match.error.message}`, { cause: match.error });
+        let resolvedId = itemId;
+        let modelMatch;
+        if (!resolvedId) {
+          const match = textMatch(group, products);
+          resolvedId = match.itemId;
+          if (!resolvedId && products.length > 1) {
+            const apiKey = (await getModelKey?.())?.trim();
+            if (!apiKey) throw new Error(`请先配置 DeepSeek API 密钥。 ${match.error.message}`);
+            onStage?.('正在读取千牛候选主图');
+            portraits ??= await material.productPortraits(products);
+            modelMatch = await matchWithDeepSeek({ group, products, portraits, apiKey, fetchImpl, onStage });
+            await material.checkAccess();
+            resolvedId = modelMatch.itemId;
           }
-          matchedColor = color;
+          if (!resolvedId) throw match.error;
         }
-        if (!resolvedId) throw match.error;
+        resolved.push({ group, itemId: resolvedId, title: products.find(product => product.id === resolvedId)?.title ?? '',
+          ...(modelMatch && { matchedBy: 'deepseek', matchReason: modelMatch.reason }) });
+      } catch (error) {
+        if (!onUnmatched) throw error;
+        await material.checkAccess();
+        onUnmatched({ group, error });
       }
-      const ocr = Boolean(products.find(product => product.id === resolvedId)?.ocrText);
-      resolved.push({ group, itemId: resolvedId, ocr, title: products.find(product => product.id === resolvedId)?.title ?? '',
-        ...(matchedColor && { matchedBy: 'image-color', matchedColor }) });
     }
   }
   return resolved;
