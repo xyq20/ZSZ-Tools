@@ -6,7 +6,9 @@ on:
       - 'codex/verify-windows-update/**'
 
 permissions:
-  contents: read
+  # GitHub only exposes draft releases to identities with repository push access.
+  # Do not persist checkout credentials or pass the token to the installers.
+  contents: write
 
 jobs:
   upgrade:
