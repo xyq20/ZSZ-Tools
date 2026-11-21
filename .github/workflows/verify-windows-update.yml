@@ -27,7 +27,7 @@ jobs:
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $tag = "v$version"
-          $result = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
+          $result = gh release view $tag --json isDraft,assets --jq '{draft:.isDraft,assets:[.assets[]|{name,size,digest}]}'
           if ($LASTEXITCODE) { throw "Could not read the staged release" }
           $result | Set-Content "$env:RUNNER_TEMP/offer.json" -Encoding utf8
           $release = $result | ConvertFrom-Json
