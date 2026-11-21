@@ -1,5 +1,5 @@
-const views=['home','report','price','monthly','taobao','taobao-reminders','taobao-stock','taobao-soutu','sycm'];
-const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒','taobao-stock':'三公 / 自动库存填写','taobao-soutu':'小林 / 千牛搜推素材',sycm:'董卓 / 生意参谋数据抓取'};
+const views=['home','report','price','monthly','return-rate','taobao','taobao-reminders','taobao-stock','taobao-soutu','sycm'];
+const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表','return-rate':'双姐 / 退货率报表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒','taobao-stock':'三公 / 自动库存填写','taobao-soutu':'小林 / 千牛搜推素材',sycm:'董卓 / 生意参谋数据抓取'};
 const stockSection=document.createElement('section');
 stockSection.id='taobao-stock';stockSection.hidden=true;
 stockSection.innerHTML='<h1>自动库存填写（三公）</h1><p>中古Remake商店 · 按 Excel 二店名称和 SKU 商家编码同步库存</p><div class="toolbar"><button id="taobao-stock-login" data-job>打开二店登录</button><button id="taobao-stock-verify-login" data-job>检查登录</button><button id="taobao-stock-choose" data-job>选择库存 Excel</button><button id="taobao-stock-start" data-job>开始填写库存</button><button id="taobao-stock-resume" data-job>继续未完成任务</button><button id="taobao-stock-report" data-job>查看简洁报告</button></div><p id="taobao-stock-book">尚未选择库存表</p><p id="taobao-stock-progress" role="status" aria-live="polite">登录和任务记录保存在本机。任务中断后可继续处理。</p>';
@@ -15,6 +15,7 @@ for(const button of document.querySelectorAll('[data-view]'))button.addEventList
  }
  window.scrollTo(0,0);
  if(name==='taobao-reminders')loadReminders();
+ if(name==='return-rate')loadReturnRateConfig();
 });
 const search=document.getElementById('search');
 const ownerFilters=[...document.querySelectorAll('[data-owner-filter]')];
@@ -88,13 +89,15 @@ let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;
 let independentReminder=false;
 let soutuDirectory=false,soutuReady=false;
+let returnRateConfigured=false,hasReturnRateResult=false;
 let busy=false,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false,hasStockBook=false;
 const statusFor=tool=>document.getElementById(tool+'-progress');
-function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;refreshSoutuActions();document.getElementById('taobao-reminders-enabled').disabled=busy||independentReminder;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;document.getElementById('taobao-stock-start').disabled=busy||!hasStockBook;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
+function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;refreshSoutuActions();document.getElementById('return-rate-start').disabled=busy||!returnRateConfigured;document.getElementById('return-rate-reveal').disabled=busy||!hasReturnRateResult;document.getElementById('taobao-reminders-enabled').disabled=busy||independentReminder;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;document.getElementById('taobao-stock-start').disabled=busy||!hasStockBook;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
 async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
 window.desktop?.onProgress(({ tool, message, batch }) => {
+  if (tool === 'return-rate' && batch) renderReturnRateProgress(batch);
   if (tool === 'taobao-soutu' && batch) renderSoutuBatch(batch, message);
   else if (tool !== 'taobao-soutu' || soutuField('batch').hidden) statusFor(tool).textContent = message;
   if (tool === 'sycm' || tool === 'taobao-soutu') {
@@ -118,6 +121,76 @@ document.getElementById('report-query').addEventListener('click',()=>run('report
 }
 statusFor('report').textContent=`${r.shops} 家店铺、${r.monthly.length} 个月，${r.unassignedRefunds?.length ? '采集完成，存在待核对退款' : '金额核对通过'}。查询时间：${new Date(r.queriedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})}`;}));
 refreshActions();
+
+const returnRateField = name => document.getElementById(`return-rate-${name}`);
+const paidMonthParts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Shanghai', year:'numeric', month:'2-digit'})
+  .formatToParts(new Date());
+const paidYear = Number(paidMonthParts.find(part => part.type === 'year').value);
+const paidMonth = Number(paidMonthParts.find(part => part.type === 'month').value);
+const lastPaidMonth = `${paidMonth===1 ? paidYear-1 : paidYear}-${String(paidMonth===1 ? 12 : paidMonth-1).padStart(2,'0')}`;
+returnRateField('month').value = lastPaidMonth;
+returnRateField('month').max = lastPaidMonth;
+
+function renderReturnRateConfig(state) {
+  returnRateConfigured = state.configured;
+  returnRateField('config').textContent = state.source || '请导入快麦开放平台 JSON 配置。';
+  if (state.companyId && !returnRateField('company').value) returnRateField('company').value = state.companyId;
+  if (!state.configured || !returnRateField('company').value) returnRateField('settings').open = true;
+  refreshActions();
+}
+async function loadReturnRateConfig() {
+  try {
+    renderReturnRateConfig(await call('return-rate-status'));
+  } catch (error) {
+    renderReturnRateConfig({configured:false, source:error.message});
+  }
+}
+function renderReturnRateProgress({completed,total}) {
+  returnRateField('task').hidden = false;
+  const bar = returnRateField('bar');
+  bar.max = total;
+  bar.value = completed;
+  returnRateField('percent').textContent = Math.floor(completed * 100 / total) + '%';
+}
+returnRateField('import').addEventListener('click', () => run('return-rate', async () => {
+  const state = await call('return-rate-import');
+  if (state) {
+    returnRateField('company').value = state.companyId || returnRateField('company').value;
+    renderReturnRateConfig(state);
+    statusFor('return-rate').textContent = 'API 配置已导入。';
+  }
+}));
+returnRateField('form').addEventListener('submit', event => {
+  event.preventDefault();
+  return run('return-rate', async () => {
+    hasReturnRateResult = false;
+    returnRateField('totals').hidden = true;
+    returnRateField('task').hidden = true;
+    statusFor('return-rate').textContent = '请选择 Excel 保存位置。';
+    const result = await call('return-rate-start', {
+      month:returnRateField('month').value,
+      selectionGroup:returnRateField('group').value,
+      minimum:returnRateField('minimum').valueAsNumber,
+      excluded:returnRateField('excluded').value,
+      companyId:returnRateField('company').value,
+    });
+    if (!result) {
+      statusFor('return-rate').textContent = '已取消保存。';
+      return;
+    }
+    hasReturnRateResult = true;
+    const fmt = new Intl.NumberFormat('zh-CN');
+    const refunds = result.before + result.after;
+    const rate = result.sales ? new Intl.NumberFormat('zh-CN', {
+      style:'percent', minimumFractionDigits:2, maximumFractionDigits:2,
+    }).format(refunds / result.sales) : '';
+    table('return-rate-totals', ['款数','销量','未发货仅退款数量','退货退款数量','总退款率'],
+      [[fmt.format(result.count),fmt.format(result.sales),fmt.format(result.before),fmt.format(result.after),rate]]);
+    returnRateField('totals').hidden = false;
+    statusFor('return-rate').textContent = '已核对并导出：' + result.file;
+  });
+});
+returnRateField('reveal').addEventListener('click', () => run('return-rate', () => call('return-rate-reveal')));
 
 const monthlyDate=document.getElementById('monthly-date');
 monthlyDate.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

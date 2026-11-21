@@ -101,6 +101,13 @@
         "src/recognize.ps1": "modules/taobao-soutu/recognize.ps1",
         "config.example.json": "modules/taobao-soutu/defaults.json"
       }
+    },
+    "return-rate": {
+      "source": "../../../Documents/ChatGPT/退货率（双姐）",
+      "files": {
+        "return_report.py": "business/return-rate-python/return_report.py",
+        "report-query.json": "business/return-rate-python/report-query.json"
+      }
     }
   }
 }

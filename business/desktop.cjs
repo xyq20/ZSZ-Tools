@@ -45,6 +45,14 @@ function setupBusiness(win,app){
  handle('business-report-export',()=>exclusive(async()=>{if(!reportResult)throw Error('请先查询报表');const r=await dialog.showSaveDialog(win,{title:'导出丹姐表格',buttonLabel:'保存',defaultPath:`丹姐表格_${reportResult.start}_${reportResult.end}.xlsx`,filters:[{name:'Excel 工作簿',extensions:['xlsx']}]});if(r.canceled)return null;await reports.exportReport(reportResult,r.filePath);return r.filePath;}));
  const monthly=createMonthlyTool({app,win,dialog,shell:require('electron').shell,request:(route,body)=>request('monthly',route,body),progress:message=>progress('monthly',message)});
  for(const [action,method] of [['monthly-choose','choose'],['monthly-plan','plan'],['monthly-preview','preview'],['monthly-save','save'],['monthly-export','export'],['monthly-reports','openReports']])handle('business-'+action,(...args)=>exclusive(()=>monthly[method](...args)));
+
+ const returnRate=require('./return-rate.cjs').createReturnRateTool({
+  app,win,dialog,shell:require('electron').shell,safeStorage,
+  progress:(message,step)=>progress('return-rate',message,step)
+ });
+ handle('business-return-rate-status', returnRate.status);
+ for(const [action,method] of [['import','importConfig'],['start','start'],['reveal','reveal']])
+  handle('business-return-rate-'+action,(...args)=>exclusive(()=>returnRate[method](...args)));
  const taobao=require('./taobao.cjs').createTaobaoTool({app,win,dialog,safeStorage,progress:message=>progress('taobao',message)});
  for(const [action,method] of [['taobao-settings','settings'],['taobao-save-key','saveKey'],['taobao-login','login'],['taobao-choose','choose'],['taobao-prepare','prepare'],['taobao-publish','publish'],['taobao-history','history']])handle('business-'+action,(...args)=>exclusive(()=>taobao[method](...args)));
  const reminders=require('./taobao-reminders.cjs').createTaobaoReminders({

@@ -9,23 +9,23 @@ function runtimePaths(app,resourcesPath=process.resourcesPath){
  const runtime=app.isPackaged?path.join(root,'python'):path.join(root,'runtimes',`${process.platform==='darwin'?'mac':'win'}-${process.arch}`);
  return {python:process.platform==='win32'?path.join(runtime,'python.exe'):path.join(runtime,'bin/python3.12'),bridge:path.join(app.isPackaged?root:__dirname,'monthly-python/bridge.py')};
 }
-function runPython(paths,job,progress=()=>{}){
+function runPython(paths,job,progress=()=>{},{label='总表'}={}){
  return new Promise((resolve,reject)=>{
   const child=spawn(paths.python,['-I','-B','-X','utf8','-u',paths.bridge],{windowsHide:true,stdio:['pipe','pipe','pipe']});
   let pending='',bytes=0,stderr='',result,failed=false;
   const fail=error=>{if(failed)return;failed=true;clearTimeout(timer);child.kill();reject(error);};
-  const timer=setTimeout(()=>fail(Error('总表处理超时，请关闭 Excel/WPS 后重试')),15*60*1000);
-  child.on('error',error=>fail(Error(error.code==='ENOENT'?'总表运行环境缺失，请安装包含总表工具的完整新版':error.message)));
+  const timer=setTimeout(()=>fail(Error(label+'处理超时，请重试')),15*60*1000);
+  child.on('error',error=>fail(Error(error.code==='ENOENT'?label+'运行环境缺失，请安装完整工具箱':error.message)));
   child.stdout.setEncoding('utf8');child.stderr.setEncoding('utf8');
   child.stdout.on('data',chunk=>{
-   bytes+=Buffer.byteLength(chunk);if(bytes>64*1024*1024)return fail(Error('总表结果过大，请缩小工作簿后重试'));
+   bytes+=Buffer.byteLength(chunk);if(bytes>64*1024*1024)return fail(Error(label+'返回的结果过大'));
    pending+=chunk;let end;
    while((end=pending.indexOf('\n'))>=0){const line=pending.slice(0,end);pending=pending.slice(end+1);if(!line.trim())continue;
-    try{const message=JSON.parse(line);if(message.type==='progress')progress(String(message.data));else if(message.type==='result')result=message.data;}catch{return fail(Error('总表处理程序返回了无效结果'));}
+    try{const message=JSON.parse(line);if(message.type==='progress')progress(message.data);else if(message.type==='result')result=message.data;}catch{return fail(Error(label+'处理程序返回了无效结果'));}
    }
   });
   child.stderr.on('data',chunk=>{stderr=(stderr+chunk).slice(-16000);});
-  child.on('close',code=>{clearTimeout(timer);if(failed)return;if(!result?.ok)return reject(Error(result?.error||stderr.trim()||`总表处理程序退出（${code}）`));if(code!==0)return reject(Error('总表处理未正常结束'));resolve(result.value);});
+  child.on('close',code=>{clearTimeout(timer);if(failed)return;if(!result?.ok)return reject(Error(result?.error||stderr.trim()||`${label}处理程序退出（${code}）`));if(code!==0)return reject(Error(label+'处理未正常结束'));resolve(result.value);});
   child.stdin.on('error',error=>{if(error.code!=='EPIPE')fail(error);});
   child.stdin.end(JSON.stringify(job));
  });

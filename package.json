@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.39",
+  "version": "0.4.40",
   "private": true,
   "main": "bootstrap.cjs",
   "scripts": {
@@ -44,7 +44,8 @@
       "modules/**/*",
       "!business/sycm-python/**/*",
       "!business/taobao-stock/**/*",
-      "!business/hot_update.py"
+      "!business/hot_update.py",
+      "!business/return-rate-python/**/*"
     ],
     "mac": {
       "extendInfo": {
@@ -130,6 +131,15 @@
       {
         "from": "business/hot_update.py",
         "to": "toolkit-update.py"
+      },
+      {
+        "from": "business/return-rate-python",
+        "to": "return-rate-python",
+        "filter": [
+          "bridge.py",
+          "return_report.py",
+          "report-query.json"
+        ]
       }
     ],
     "asarUnpack": [

@@ -73,3 +73,11 @@
 同事打开「小林 → 千牛搜推素材」，用 Chrome 或 Edge 登录目标千牛店铺，选择共享盘「搜推素材」根目录，勾选并核对本批分组，再确认发布。多条同名商品无法区分时，填写实际核对过的商品 ID。已确认的整款移入「已上」。安全验证和待确认记录会暂停提交。共享目录同一时间只允许一个批次发布。
 
 会话及发布记录位于该电脑本机的 `team-toolkit/taobao-soutu`。安装包不包含这些数据或共享盘素材。macOS OCR 已随包编译；Windows 使用系统简体中文 OCR。缺少 OCR 或颜色文字时，可按实际商品 ID 核对。
+
+## 退货率报表（双姐）
+
+独立源码位于 `Documents/ChatGPT/退货率（双姐）`，登记为 `return-rate`。修改来源后先运行 Python 单元测试，再执行 `npm run tools:sync -- return-rate --apply`。工具箱的 `business/return-rate-python/bridge.py` 通过 stdin 接收本机配置，通过 JSON 行回传进度与结果。打包复用已有的 Python、Playwright 和 openpyxl 运行环境。
+
+在「双姐 → 退货率报表」选择已结束的付款月份，输入本次需要排除的商家编码并选择 Excel 保存位置。选款分组默认「钊叔制」，销量门槛默认 100 件。编码确定后分别统计全部淘宝和非淘宝店铺，再与全店统计逐款核对。进度表示已完成的处理步骤。
+
+本机已有库存监控台配置时可直接使用。也可通过「快麦连接设置」导入含 `appKey`、`appSecret`、`session` 的 JSON，并填写 ERP 公司编号。导入凭据加密写入本机用户数据目录。Chrome 登录由独立会话管理，macOS 可复用已存在的 ERP 独立 Chrome 档案。应用资源只含桥接代码与白名单内的业务源码。
