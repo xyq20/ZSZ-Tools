@@ -5,16 +5,22 @@ import json
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from playwright.async_api import async_playwright
+from playwright.async_api import Error as BrowserError, async_playwright
+
+# Windows embedded Python's python312._pth omits the script directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from taobao_stock.batch import BatchAdapter
 from taobao_stock.browser import SHOP_NAME
 from taobao_stock.errors import SessionError, ShopMismatch
 from taobao_stock.session import load_shop_binding, save_shop_binding
-from taobao_stock.workflow import create_job, find_jobs, run_job
+from taobao_stock.workflow import EXPECTED_SHOP, create_job, find_jobs, run_job
 
 START_URL = 'https://myseller.taobao.com/home.htm/SellManage/on_sale?current=1&pageSize=20'
+LOGIN_HOSTS = {'myseller.taobao.com', 'loginmyseller.taobao.com',
+               'login.taobao.com', 'havanalogin.taobao.com'}
 DATA_ROOT = Path(os.environ['STOCK_DATA_ROOT']).expanduser().resolve()
 PROFILE = DATA_ROOT / '.browser-profile' / 'er-dian'
 CHROME = os.environ['STOCK_BROWSER_BIN']
@@ -31,10 +37,13 @@ class Worker:
         self.playwright = None
         self.context = None
         self.page = None
+        self.page_loaded = False
 
     async def open_browser(self):
         if self.page is not None and not self.page.is_closed():
             await self.page.bring_to_front()
+            if not self.page_loaded or not self.at_login_entry():
+                await self.load_login_entry()
             return
         if self.context is not None:
             await self.context.close()
@@ -44,14 +53,31 @@ class Worker:
             self.playwright = None
         PROFILE.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.playwright = await async_playwright().start()
-        self.context = await self.playwright.chromium.launch_persistent_context(
-            str(PROFILE), executable_path=CHROME, headless=False, viewport=None,
-            locale='zh-CN', accept_downloads=False,
-            args=['--no-first-run', '--no-default-browser-check'],
-        )
+        try:
+            self.context = await self.playwright.chromium.launch_persistent_context(
+                str(PROFILE), executable_path=CHROME, headless=False, viewport=None,
+                locale='zh-CN', accept_downloads=False, timeout=20000,
+                args=['--no-first-run', '--no-default-browser-check'],
+            )
+        except BrowserError:
+            raise SessionError('二店浏览器启动失败。请检查 Chrome 或 Edge 是否可打开，并关闭占用本工具登录档案的窗口后重试。') from None
         self.context.set_default_timeout(15000)
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
-        await self.page.goto(START_URL, wait_until='domcontentloaded')
+        await self.load_login_entry()
+
+    def at_login_entry(self):
+        url = urlsplit(self.page.url)
+        return url.scheme == 'https' and url.hostname in LOGIN_HOSTS
+
+    async def load_login_entry(self):
+        self.page_loaded = False
+        try:
+            response = await self.page.goto(START_URL, wait_until='domcontentloaded', timeout=15000)
+        except BrowserError:
+            raise SessionError('二店页面未能加载。请检查网络后，再点“打开二店登录”重试。') from None
+        if not self.at_login_entry() or (response is not None and response.status >= 400):
+            raise SessionError('浏览器未到达千牛或淘宝登录页。请检查网络后重试。')
+        self.page_loaded = True
 
     async def close(self):
         if self.context is not None:
@@ -66,7 +92,7 @@ class Worker:
             return {'message': '已打开二店专用浏览器。请登录“%s”，完成验证后点“检查登录”。' % SHOP_NAME}
         if action == 'verify-login':
             await self.open_browser()
-            adapter = BatchAdapter(self.page)
+            adapter = BatchAdapter(self.page, EXPECTED_SHOP)
             shop = await adapter.verify_shop()
             existing = load_shop_binding(DATA_ROOT)
             if existing is not None and existing != shop:

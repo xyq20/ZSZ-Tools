@@ -4,6 +4,8 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {EventEmitter}=require('node:events');
+const {spawnSync}=require('node:child_process');
+const {runtimePaths}=require('../business/monthly.cjs');
 const {createTaobaoStockTool}=require('../business/taobao-stock.cjs');
 
 class FakeChild extends EventEmitter{
@@ -44,7 +46,7 @@ test('stock sync host passes selected workbook and opens the task report',async 
   dialog:{showOpenDialog:async()=>({canceled:false,filePaths:[excel]})},
   shell:{openPath:async file=>{opened.push(file);return ''; }},
   progress:message=>progress.push(message),runner:()=>child,
-  browserFinder:()=>'/test/chrome',probe:()=>({status:0}),
+  browserFinder:()=>'/test/chrome',
  });
 
  assert.equal((await tool.login()).message,'命令已完成');
@@ -56,4 +58,38 @@ test('stock sync host passes selected workbook and opens the task report',async 
  await tool.cleanup();
  assert.equal(child.commands.at(-1).action,'shutdown');
  assert.ok(progress.includes('正在创建库存同步任务…'));
+});
+
+test('stock bridge finds adjacent modules with the bundled Python in isolated mode',t=>{
+ const {python}=runtimePaths({isPackaged:false});
+ if(!fs.existsSync(python))return t.skip('bundled Python unavailable');
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'toolkit-stock-'));
+ t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+ const script=path.resolve(__dirname,'../business/taobao-stock/bridge.py');
+ const result=spawnSync(python,['-I','-B','-X','utf8','-u',script],{
+  env:{...process.env,STOCK_DATA_ROOT:directory,STOCK_BROWSER_BIN:'/unused'},
+  input:'{"action":"jobs","request_id":"smoke"}\n',encoding:'utf8',timeout:10000
+ });
+ assert.equal(result.status,0,result.stderr||String(result.error));
+ assert.deepEqual(JSON.parse(result.stdout),{kind:'result',request_id:'smoke',data:{jobs:[]}});
+});
+
+test('stock login recovers after an unresponsive worker or an exit before pipe closure',async t=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'toolkit-stock-'));
+ t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+ const hanging=new FakeChild(),exiting=new FakeChild(),healthy=new FakeChild();
+ hanging.stdin.write=()=>{};
+ hanging.kill=()=>{hanging.killed=true;};
+ exiting.stdin.write=()=>setImmediate(()=>exiting.emit('exit',1));
+ const children=[hanging,exiting,healthy];
+ const tool=createTaobaoStockTool({
+  app:{isPackaged:false,getPath:()=>directory},progress:()=>{},
+  runner:()=>children.shift(),browserFinder:()=>'/test/chrome',
+  loginTimeoutMs:100
+ });
+ await assert.rejects(tool.login(),/登录响应超时/);
+ assert.equal(hanging.killed,true);
+ await assert.rejects(tool.login(),/组件启动或运行失败/);
+ assert.equal((await tool.login()).message,'命令已完成');
+ await tool.cleanup();
 });

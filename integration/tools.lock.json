@@ -197,12 +197,12 @@
     },
     "taobao-stock": {
       "source": "../../../Documents/ChatGPT/自动库存填写",
-      "commit": "abdd40547138dfed2ac3e88f58df655bc7a17db0",
+      "commit": "12bc2bb0b2e78dad2e0c0d11cf5e1e164eeabaf7",
       "dirty": false,
       "files": {
         "toolbox_bridge.py": {
           "target": "business/taobao-stock/bridge.py",
-          "sha256": "54311477d0f461db57cf81a868116bfb2ca133c7eb733a140c42cfe7380c4e0e"
+          "sha256": "38180d9f09881784f423b0cd80d1a9d3ef85090d69006f07074099d41f2b34ef"
         },
         "taobao_stock/__init__.py": {
           "target": "business/taobao-stock/taobao_stock/__init__.py",

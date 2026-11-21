@@ -1,10 +1,10 @@
 const fs=require('node:fs'),path=require('node:path');
-const {spawn,spawnSync}=require('node:child_process');
+const {spawn}=require('node:child_process');
 const {runtimePaths}=require('./monthly.cjs');
 const {browserPath}=require('./taobao.cjs');
 
 function createTaobaoStockTool({app,win,dialog,shell,progress,runner=spawn,
- browserFinder=browserPath,probe=spawnSync}){
+ browserFinder=browserPath,loginTimeoutMs=90000}){
  const directory=path.join(app.getPath('userData'),'taobao-stock');
  const scripts=app.isPackaged?path.join(process.resourcesPath,'taobao-stock'):
   path.join(__dirname,'taobao-stock');
@@ -34,17 +34,21 @@ function createTaobaoStockTool({app,win,dialog,shell,progress,runner=spawn,
   if(worker&&!worker.killed)return;
   const executable=browserFinder();
   if(!executable)throw Error('请先安装 Google Chrome 或 Microsoft Edge');
-  const result=probe(python,['-B','-c','import playwright.async_api, openpyxl'],
-   {windowsHide:true,stdio:'ignore',timeout:20000});
-  if(result.error||result.status!==0)throw Error('工具箱缺少库存同步运行依赖，请安装完整新版工具箱');
   await fs.promises.mkdir(directory,{recursive:true,mode:0o700});
   worker=runner(python,['-B','-X','utf8','-u',path.join(scripts,'bridge.py')],{
    env:{...process.env,STOCK_DATA_ROOT:directory,STOCK_BROWSER_BIN:executable,
     PYTHONUNBUFFERED:'1',PYTHONUTF8:'1'},windowsHide:true,stdio:['pipe','pipe','pipe']
   });
+  const current=worker;
+  const disconnect=message=>{
+   if(worker!==current)return;
+   worker=null;
+   failPending(message);
+  };
   buffer='';
   worker.stdout.setEncoding('utf8');
   worker.stdout.on('data',chunk=>{
+   if(worker!==current)return;
    buffer+=chunk;
    const lines=buffer.split(/\r?\n/);buffer=lines.pop();
    for(const line of lines)if(line.trim())receive(line);
@@ -54,20 +58,32 @@ function createTaobaoStockTool({app,win,dialog,shell,progress,runner=spawn,
    const line=String(chunk).trim();
    if(line)progress('库存同步运行中…');
   });
-  worker.on('error',()=>{worker=null;failPending('无法启动库存同步运行环境');});
-  worker.on('close',code=>{
-   worker=null;
-   failPending(code===0?'库存同步进程已结束':'库存同步进程意外退出，请查看任务报告');
-  });
+  worker.stdin.on?.('error',()=>disconnect('库存进程连接已断开，请重试'));
+  worker.on('error',()=>disconnect('无法启动库存同步运行环境，请检查工具箱安装'));
+  worker.on('exit',code=>disconnect(code===0?'库存同步进程已结束':'库存同步组件启动或运行失败，请检查工具箱安装后重试'));
+  worker.on('close',()=>disconnect('库存同步进程已关闭，请重试'));
  }
  async function call(action,args={}){
   await ensureWorker();
   const id=String(++requestId);
+  const current=worker;
+  if(!current)throw Error('库存同步组件未启动，请重试');
   return new Promise((resolve,reject)=>{
-   pending.set(id,{resolve,reject});
-   worker.stdin.write(JSON.stringify({action,request_id:id,...args})+'\n',error=>{
+   const timer=['login','verify-login'].includes(action)?setTimeout(()=>{
+    if(worker!==current)return;
+    worker=null;
+    failPending('二店登录响应超时，请检查浏览器和网络后重试');
+    current.kill();
+   },loginTimeoutMs):null;
+   pending.set(id,{
+    resolve:data=>{clearTimeout(timer);resolve(data);},
+    reject:error=>{clearTimeout(timer);reject(error);}
+   });
+   current.stdin.write(JSON.stringify({action,request_id:id,...args})+'\n',error=>{
     if(!error)return;
-    pending.delete(id);reject(Error('库存同步命令发送失败'));
+    const request=pending.get(id);
+    pending.delete(id);
+    request?.reject(Error('库存同步命令发送失败，请重试'));
    });
   });
  }
@@ -88,7 +104,7 @@ function createTaobaoStockTool({app,win,dialog,shell,progress,runner=spawn,
  }
  return {
   async login(){
-   await ensureWorker();
+   progress('正在打开二店专用浏览器…');
    return call('login');
   },
   async verifyLogin(){return call('verify-login');},
