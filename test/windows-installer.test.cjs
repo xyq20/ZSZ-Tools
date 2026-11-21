@@ -20,6 +20,7 @@ test('Windows updater hands off only after the installation helper signals readi
   child.unref=()=>{detached=true;};
   const token=starts?'successful':'failed';
   const executable=path.join(directory,'钊叔工具箱.exe');
+  const stale=path.join(directory,'helper-'+('a'.repeat(32))+'.ready');await fsp.writeFile(stale,'ready');
   const command=launchHelper({platform:'win32',directory,file:path.join(directory,'installer.exe'),info:{sha256:'abc',size:1},token,executable,windowsNode:process.execPath},(command,args)=>{
    const request=JSON.parse(args[1]);
    assert.equal(command,path.join(directory,'update-node.exe'));
@@ -36,6 +37,8 @@ test('Windows updater hands off only after the installation helper signals readi
   if(starts)await command;
   else await assert.rejects(command,/更新助手未就绪/);
   assert.equal(detached,starts);
+  assert.equal(fs.existsSync(stale),false);
+  assert.equal(fs.existsSync(path.join(directory,'helper-'+token+'.ready')),false);
  }
 });
 
@@ -44,7 +47,7 @@ test('staged update helper waits for exit, runs silently and reopens the toolbox
  const root=await fsp.mkdtemp(path.join(os.tmpdir(),'toolkit-helper-流程-'));
  t.after(()=>fsp.rm(root,{recursive:true,force:true}));
  const updates=path.join(root,'updates');
- for(const exitCode of [0,2]){
+ for(const exitCode of [0,2,5]){
   const directory=path.join(updates,String(exitCode));await fsp.mkdir(directory,{recursive:true});
   const file=path.join(directory,'installer.exe'),executable=path.join(directory,'toolbox.exe');
   const trace=path.join(directory,'trace'),healthy=path.join(directory,'healthy');
@@ -60,15 +63,18 @@ test('staged update helper waits for exit, runs silently and reopens the toolbox
   for(let attempt=0;attempt<50;attempt++){
    const log=await fsp.readFile(logFile,'utf8');
    const observed=await fsp.readFile(trace,'utf8').catch(()=>'');
-   if(observed.includes('toolbox: --updated')&&/新版工具箱已启动|安装器退出码 2/.test(log))break;
+   if(observed.includes('toolbox: --updated')&&/新版工具箱已启动|安装器退出码 2|授权清理/.test(log))break;
    await delay(100);
   }
   assert.equal(await fsp.readFile(trace,'utf8'),'installer: /S --updated\ntoolbox: --updated\n');
   const log=await fsp.readFile(logFile,'utf8');
   if(exitCode===0)assert.match(log,/新版工具箱已启动/);
   else{
-   assert.match(log,/安装器退出码 2/);
-   assert.deepEqual(await acknowledgeUpdate({getPath:()=>root,getVersion:()=> '0.4.30'},'win32'),{detail:'后台更新失败，安装器退出码 2',log:logFile});
+   const reason=await fsp.readFile(healthy+'.failed','utf8');
+   assert.match(reason,exitCode===2?/安装器退出码 2/:/授权清理/);
+   assert.match(reason,/toolkit-install-processes\.log/);
+   assert(log.includes(reason));
+   assert.deepEqual(await acknowledgeUpdate({getPath:()=>root,getVersion:()=> '0.4.30'},'win32'),{detail:reason,log:logFile});
   }
  }
 });

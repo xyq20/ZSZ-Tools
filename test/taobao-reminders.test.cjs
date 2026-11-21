@@ -10,6 +10,34 @@ const {beijingClock, parseSettings, createTaobaoReminders, DEFAULTS_FILE} = requ
 const webhook = 'https://open.feishu.cn/open-apis/bot/v2/hook/00000000-0000-0000-0000-000000000000';
 const settings = {at: '09:05', enabled: true, webhook, recipient: 'ou_fixture'};
 
+test('a Mac update preserves older internal reminder defaults in local encrypted storage',
+  {skip: process.platform !== 'darwin'}, async t => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'toolkit-defaults-'));
+    t.after(() => fs.rm(root, {recursive: true, force: true}));
+    const token = 'b'.repeat(32);
+    const old = path.join(root, '.toolkit-backup-' + token + '.app', 'Contents/Resources');
+    await fs.mkdir(old, {recursive: true});
+    await fs.writeFile(path.join(old, DEFAULTS_FILE), JSON.stringify({webhook, recipient: settings.recipient}));
+    await fs.mkdir(path.join(root, 'updates'));
+    const version = '0.4.34';
+    await fs.writeFile(path.join(root, 'updates/pending.json'), JSON.stringify({token, version}));
+    const app = {isPackaged: true, getVersion: () => version,
+      getPath: key => key === 'exe' ? path.join(root, 'Toolkit.app/Contents/MacOS/Toolkit') : root};
+    const safeStorage = {encryptString: s => Buffer.from(Buffer.from(s).toString('base64')),
+      decryptString: b => Buffer.from(b.toString(), 'base64').toString()};
+    const start = () => createTaobaoReminders({app, safeStorage, resourcesPath: path.join(root, 'new-resources'),
+      blocked: () => true, progress: () => {}});
+    process.argv.push('--toolkit-update-token=' + token);
+    try {
+      const tool = start();
+      try { assert.equal(tool.status().hasWebhook, true); } finally { tool.stop(); }
+    } finally { process.argv.pop(); }
+    await fs.unlink(path.join(old, DEFAULTS_FILE));
+    const restarted = start();
+    try { assert.equal(restarted.status().recipient, settings.recipient); } finally { restarted.stop(); }
+    assert(!(await fs.readFile(path.join(root, 'taobao-reminders/defaults.bin'))).includes(webhook));
+  });
+
 test('the reminder entry point finds qianniu under isolated Python', async t => {
   const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'taobao-reminders-import-'));
   t.after(() => fs.rm(stateDir, {recursive: true, force: true}));

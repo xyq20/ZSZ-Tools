@@ -1,0 +1,44 @@
+name: Verify Windows update
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'codex/verify-windows-update/**'
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test Windows process selection and update controller
+        run: node --test test/windows-installer.test.cjs test/app-update.test.cjs
+      - name: Fetch staged installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+          $result = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
+          if ($LASTEXITCODE) { throw "Could not read the staged release" }
+          $result | Set-Content "$env:RUNNER_TEMP/offer.json" -Encoding utf8
+          $release = $result | ConvertFrom-Json
+          if (!$release.draft) { throw "The candidate must still be a draft" }
+          $base = @($release.assets | Where-Object name -Match '^test-from-[\d.]+-win-x64\.exe$')
+          $target = @($release.assets | Where-Object name -EQ "-$version-win-x64.exe")
+          if ($base.Count -ne 1 -or $target.Count -ne 1) { throw "Missing or ambiguous staged installer" }
+          gh release download $tag --pattern $base[0].name --output "$env:RUNNER_TEMP/base.exe"
+          if ($LASTEXITCODE) { throw "Could not download the baseline installer" }
+          gh release download $tag --pattern $target[0].name --output "$env:RUNNER_TEMP/candidate.exe"
+          if ($LASTEXITCODE) { throw "Could not download the candidate" }
+      - name: Upgrade the installed application with a residual process
+        shell: pwsh
+        run: node scripts/smoke-windows-update.cjs "$env:RUNNER_TEMP/offer.json" "$env:RUNNER_TEMP/base.exe" "$env:RUNNER_TEMP/candidate.exe"

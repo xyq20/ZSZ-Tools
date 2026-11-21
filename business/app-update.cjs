@@ -105,12 +105,19 @@ async function waitForWindowsHelper(child,ready,log){
  const reason=detail||`启动未确认（退出码 ${child.exitCode??'未知'}）`;
  throw Error(`Windows 更新助手未就绪：${reason}。日志：${log}`);
 }
+async function clearWindowsReadyFiles(directory){
+ const names=await fs.readdir(directory);
+ for(const name of names){
+  if(/^helper-[a-f0-9]{32}\.ready$/.test(name))await fs.unlink(path.join(directory,name)).catch(error=>{if(error.code!=='ENOENT')throw error;});
+ }
+}
 async function launchHelper({platform,directory,file,info,mac,token,executable,windowsNode},spawnProcess=spawn){
  const log=path.join(directory,'install.log');let command,args,ready;
  if(platform==='darwin'){
   const helper=path.join(directory,'install.sh');await fs.writeFile(helper,macScript(),{mode:0o700});
   command='/bin/sh';args=[helper,String(process.pid),mac.target,mac.staged,mac.backup,path.join(directory,'healthy'),token,mac.binary];
  }else{
+  await clearWindowsReadyFiles(directory);
   const runtime=windowsNode||path.join(process.resourcesPath,'python/Lib/site-packages/playwright/driver/node.exe');
   command=path.join(directory,'update-node.exe');
   await fs.copyFile(runtime,command);
@@ -122,11 +129,14 @@ async function launchHelper({platform,directory,file,info,mac,token,executable,w
  const helperLog=ready?path.join(directory,'install-helper.log'):log;
  const handle=await fs.open(helperLog,ready?'w':'a',0o600);
  try{
-  const child=spawnProcess(command,args,{detached:true,windowsHide:true,stdio:['ignore',handle.fd,handle.fd]});
+  const child=spawnProcess(command,args,{cwd:directory,detached:true,windowsHide:true,stdio:['ignore',handle.fd,handle.fd]});
   await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
   if(ready)await waitForWindowsHelper(child,ready,helperLog);
   child.unref();
- }finally{await handle.close();}
+ }finally{
+  await handle.close();
+  if(ready)await fs.rm(ready,{force:true}).catch(()=>{});
+ }
 }
 function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>true,platform=process.platform,arch=process.arch,fetchRelease=fetchManifest,getNetworkRoute=async()=>null,downloader=downloadFile,prepare=prepareMac,launch=launchHelper}){
  let state={status:'idle',current:app.getVersion()},info=null,file=null,directory=null,operation=null,controller=null,canQuit=false;
@@ -137,7 +147,16 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
   state:()=>({...state}),canQuit:()=>canQuit,isInstalling:()=>state.status==='installing',
   check(){if(operation||state.status==='downloaded'||state.status==='installing')return operation||Promise.resolve({...state});return run(async()=>{
    emit({status:'checking',message:'正在检查更新…'});
-   try{info=validateAsset(await fetchRelease(manifestUrl),app.getVersion(),platform,arch);return emit({...info,message:''});}
+   try{
+    info=validateAsset(await fetchRelease(manifestUrl),app.getVersion(),platform,arch);
+    let message='';
+    if(platform==='win32'&&info.status==='available'){
+     const failed=path.join(root,info.latest+'-'+platform+'-'+arch,'healthy.failed');
+     const reason=await fs.readFile(failed,'utf8').catch(()=>null);
+     if(reason)message='上次更新未完成：'+reason.trim().slice(0,1000)+'。可重试并复用已下载安装包。';
+    }
+    return emit({...info,message});
+   }
    catch(e){info=null;return emit({status:'error',message:e.message});}
   });},
   download(){if(operation)return operation;if(state.status==='downloaded')return Promise.resolve({...state});return run(async()=>{
@@ -172,7 +191,7 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>
     emit({message:'正在保存本机登录状态…'});
     await business.flushLogin();
     await fs.writeFile(path.join(root,'pending.json'),JSON.stringify({version:info.latest,directory,token}),{mode:0o600});
-    if(platform==='win32')emit({message:'工具箱即将关闭，后台更新完成后会自动打开…'});
+    if(platform==='win32')emit({message:'工具箱即将关闭。如 Windows 提示授权，请确认以关闭旧版进程，更新完成后会自动打开。'});
     await launch({platform,directory,file,info,mac,token,executable});
     canQuit=true;app.quit();return {...state};
    }catch(e){if(mac)await fs.rm(mac.staged,{recursive:true,force:true});business.endUpdate();emit({status:'downloaded',message:'更新未启动：'+e.message});throw e;}
@@ -184,13 +203,17 @@ async function acknowledgeUpdate(app,platform=process.platform){
  try{
   const value=JSON.parse(await fs.readFile(pending,'utf8'));
   if(!/^\w{32}$/.test(value.token)||path.dirname(value.directory)!==root)return;
-  if(platform==='win32'){
+  if(platform==='win32'&&value.version!==app.getVersion()){
    const detail=await fs.readFile(path.join(value.directory,'healthy.failed'),'utf8').catch(()=>null);
-   if(detail){await fs.rm(pending,{force:true});return {detail,log:path.join(value.directory,'install.log')};}
+   if(detail){await fs.rm(pending,{force:true});await clearWindowsReadyFiles(value.directory).catch(()=>{});return {detail,log:path.join(value.directory,'install.log')};}
   }
   if(value.version!==app.getVersion())return;
   if(platform==='darwin'&&!process.argv.includes('--toolkit-update-token='+value.token))return;
   await fs.writeFile(path.join(value.directory,'healthy'),'ok',{mode:0o600});await fs.rm(pending,{force:true});
+  if(platform==='win32'){
+   await clearWindowsReadyFiles(value.directory).catch(()=>{});
+   await fs.rm(path.join(value.directory,'healthy.failed'),{force:true}).catch(()=>{});
+  }
  }catch{}
 }
 module.exports={validateAsset,allowedURL,downloadFile,verifyFile,prepareMac,macScript,launchHelper,createUpdater,acknowledgeUpdate};

@@ -27,4 +27,7 @@ $reused = P 12 10 'python.exe' ($root + 'resources\python\python.exe') 20
 Assert (-not (Test-SameProcess $processes[2] $reused)) 'Reused PID must not be killed'
 Assert (Test-SameProcess $processes[2] $processes[2]) 'Same creation timestamp and executable should match'
 Assert (@(Get-ToolkitTargets @() @($root) @()).Count -eq 0) 'No process is a successful empty selection'
+$privileged = @(Get-ToolkitTargets $processes @($root) @(19) $true | Sort-Object ProcessId)
+Assert (($privileged.ProcessId -join ',') -eq '10,11,12,20') 'UAC cleanup must only close registered toolbox binaries, never external descendants'
+Assert (-not (Test-ToolkitPath (P 23 1 'other.exe' ($root + 'resources\other.exe')) @($root) $true)) 'Elevated cleanup must reject arbitrary executables in resources'
 Write-Output 'PASS: Windows process selection, path boundaries, orphan children, protected installer/helper and PID reuse'

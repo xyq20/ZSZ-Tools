@@ -70,6 +70,28 @@ async function writePrivateFile(file, contents) {
   await fsp.rename(temp, file);
 }
 
+function macUpgradeDefaults(app, safeStorage, directory) {
+  const localFile = path.join(directory, 'defaults.bin');
+  if (fs.existsSync(localFile)) {
+    return feishuDefaults(JSON.parse(safeStorage.decryptString(fs.readFileSync(localFile))));
+  }
+  const argument = process.argv.find(value => /^--toolkit-update-token=[a-f0-9]{32}$/.test(value));
+  if (!argument) return INITIAL;
+  const token = argument.split('=')[1];
+  const pendingFile = path.join(app.getPath('userData'), 'updates', 'pending.json');
+  if (!fs.existsSync(pendingFile)) return INITIAL;
+  const pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+  if (pending.token !== token || pending.version !== app.getVersion()) return INITIAL;
+  const appDirectory = path.resolve(app.getPath('exe'), '../../..');
+  const previous = path.join(path.dirname(appDirectory), '.toolkit-backup-' + token + '.app', 'Contents', 'Resources', DEFAULTS_FILE);
+  if (!fs.existsSync(previous)) return INITIAL;
+  const defaults = feishuDefaults(JSON.parse(fs.readFileSync(previous, 'utf8')));
+  fs.mkdirSync(directory, {recursive: true, mode: 0o700});
+  fs.writeFileSync(localFile + '.tmp', safeStorage.encryptString(JSON.stringify(defaults)), {mode: 0o600});
+  fs.renameSync(localFile + '.tmp', localFile);
+  return defaults;
+}
+
 function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, runner = runPython,
   browserFinder = browserPath, now = () => new Date(), resourcesPath = process.resourcesPath}) {
   const directory = path.join(app.getPath('userData'), 'taobao-reminders');
@@ -100,8 +122,10 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
     try {
       if (fs.existsSync(file)) {
         defaults = feishuDefaults(JSON.parse(fs.readFileSync(file, 'utf8')));
-        config = {...INITIAL, ...defaults};
+      } else if (process.platform === 'darwin') {
+        defaults = macUpgradeDefaults(app, safeStorage, directory);
       }
+      config = {...INITIAL, ...defaults};
     } catch {
       configError = '内置飞书配置无法读取，请重新安装内部版或手动保存配置';
     }
