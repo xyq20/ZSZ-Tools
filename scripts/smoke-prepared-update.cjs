@@ -37,7 +37,7 @@ async function pageAt(portNumber){
  catch(error){console.error('Desktop page',page.url(),(await page.locator('body').innerText({timeout:1000}).catch(()=>'' )).slice(0,600));await browser.close().catch(()=>{});throw error;}
  return {browser,page};
 }
-async function inMain(portNumber,expression,resume=false){
+async function inMain(portNumber,expression){
  const list=await until('local main-process inspector',async()=>{
   try{return (await (await fetch('http://127.0.0.1:'+portNumber+'/json/list')).json())[0];}catch{return null;}
  });
@@ -57,7 +57,6 @@ async function inMain(portNumber,expression,resume=false){
  try{
   const answer=await send('Runtime.evaluate',{expression,returnByValue:true});
   if(answer.error||answer.result?.exceptionDetails)throw Error(JSON.stringify(answer));
-  if(resume)await send('Runtime.runIfWaitingForDebugger');
   return answer.result.result.value;
  }finally{await new Promise(resolve=>{socket.onclose=resolve;socket.close();});}
 }
@@ -130,17 +129,9 @@ async function verify(){
  const output=await fs.open(path.join(workspace,'app.log'),'a');
  let browser;
  try{
-  const old=spawn(executable,['--remote-debugging-port='+rendererPort,'--inspect-brk=127.0.0.1:'+mainPort],{stdio:['ignore',output.fd,output.fd]});
+  const old=spawn(executable,['--remote-debugging-port='+rendererPort,'--inspect=127.0.0.1:'+mainPort],{stdio:['ignore',output.fd,output.fd]});
   old.unref();
   console.log('Starting packaged baseline',before,'PID',old.pid);
-  const trace=path.join(workspace,'startup-errors.log');
-  const diagnose=function(file){
-   const fs=process.getBuiltinModule('node:fs');
-   const report=error=>fs.appendFileSync(file,String(error?.stack||error)+'\n');
-   process.on('unhandledRejection',report);process.on('uncaughtExceptionMonitor',report);
-   return true;
-  };
-  await inMain(mainPort,'('+diagnose.toString()+')('+JSON.stringify(trace)+')',true);
   const ui=await pageAt(rendererPort);browser=ui.browser;const page=ui.page;
   console.log('Baseline window available');
   page.on('pageerror',error=>console.error('Renderer:',error.message));
@@ -183,7 +174,7 @@ async function verify(){
  }catch(error){
   if(browser){const page=browser.contexts()[0]?.pages()[0];if(page)console.error('Update UI:',await page.locator('#update-status').textContent({timeout:1600}).catch(()=>''));}
   console.error('Update files:',await fs.readdir(directory).catch(()=>[]));
-  for(const file of [path.join(workspace,'app.log'),path.join(workspace,'startup-errors.log'),...['install.log','install-helper.log','healthy.failed'].map(name=>path.join(directory,name))]){
+  for(const file of [path.join(workspace,'app.log'),path.join(data,'startup.log'),...['install.log','install-helper.log','healthy.failed'].map(name=>path.join(directory,name))]){
    console.error(path.basename(file),(await fs.readFile(file,'utf8').catch(()=>'' )).slice(-2200));
   }
   throw error;

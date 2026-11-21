@@ -226,7 +226,7 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
           Select-Object -First 30 | ForEach-Object { $_.Current.Name }
       }
     `).catch(()=>({stdout:''}))).stdout.slice(0,2800));
-    for (const log of [cleanupLog, path.join(directory, 'install.log'), path.join(directory, 'healthy.failed')]) {
+    for (const log of [cleanupLog, path.join(path.dirname(updates),'startup.log'), path.join(directory, 'install.log'), path.join(directory, 'healthy.failed')]) {
       const detail = await fs.readFile(log, 'utf8').catch(() => '');
       if (detail) console.error(path.basename(log), detail.slice(-2400));
     }

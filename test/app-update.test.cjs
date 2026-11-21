@@ -64,3 +64,20 @@ test('only the requested interactive visible process writes a hot-update window 
  assert.equal(proof.pid,process.pid);assert.equal(proof.token,token);assert.equal(proof.executable,process.execPath);
  await fs.stat(pending);await assert.rejects(fs.stat(path.join(directory,'healthy')),{code:'ENOENT'});
 });
+test('the Windows shortcut selects only an installed newer slot and does not redirect that slot again',async t=>{
+ const {launchTarget}=require('../business/windows-versions.cjs');
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'toolkit-shortcut-'));
+ t.after(()=>fs.rm(dir,{force:true,recursive:true}));
+ const prior=process.env.LOCALAPPDATA;
+ process.env.LOCALAPPDATA=dir;
+ t.after(()=>{if(prior===undefined)delete process.env.LOCALAPPDATA;else process.env.LOCALAPPDATA=prior;});
+ const executable=path.join(dir,'钊叔工具箱.exe'),store=path.join(dir,'.toolkit-versions');
+ await fs.writeFile(executable,'fixture');
+ assert.equal(launchTarget(executable,'1.0.0'),null);
+ const slot='1.1.0-'+'a'.repeat(32),next=path.join(store,slot,path.basename(executable));
+ await fs.mkdir(path.dirname(next),{recursive:true});await fs.writeFile(next,'fixture');
+ await fs.writeFile(path.join(store,'active.json'),JSON.stringify({slot}));
+ assert.equal(launchTarget(executable,'1.0.0'),next);
+ assert.equal(launchTarget(next,'1.1.0'),null);
+ assert.equal(launchTarget(executable,'2.0.0'),null);
+});

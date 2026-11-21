@@ -202,6 +202,7 @@ def switch(plan):
         shutil.rmtree(staged, ignore_errors=True)
     elif previous.parent.parent == staged.parent and previous.parent != staged:
         # If old processes hold files, keep the previous slot intact.
+        (previous.parent / ".toolkit-retired").touch()
         retired = previous.parent.with_name(previous.parent.name + ".retired-" + token)
         try:
             os.rename(previous.parent, retired)

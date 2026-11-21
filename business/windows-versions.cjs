@@ -1,8 +1,8 @@
-const fs = require('node:fs/promises');
+const disk = require('node:fs');
+const fs = disk.promises;
 const path = require('node:path');
 const crypto = require('node:crypto');
-const {spawn, execFile} = require('node:child_process');
-const exec = require('node:util').promisify(execFile);
+const {execFileSync} = require('node:child_process');
 const {newer} = require('../updater.cjs');
 
 const STORE = '.toolkit-versions';
@@ -15,23 +15,23 @@ function slotStore(executable) {
   return path.basename(store) === STORE && SLOT.test(path.basename(slot)) ? store : null;
 }
 
-async function personalStore(executable, version) {
-  const origin = (await fs.realpath(executable)).toLowerCase();
+function personalStore(executable, version) {
+  const origin = disk.realpathSync.native(executable).toLowerCase();
   const id = crypto.createHash('sha256').update(origin + '\0' + version).digest('hex').slice(0,32);
   return path.join(process.env.LOCALAPPDATA, 'team-toolkit', 'installations', id, STORE);
 }
 
-async function standardToken(executable) {
+function standardToken(executable) {
   // A privileged installed entry must never dispatch into a user's writable cache.
   const python = path.join(path.dirname(executable),'resources','python','python.exe');
-  const {stdout} = await exec(python,['-I','-B','-c',
-    'import ctypes; print(int(bool(ctypes.windll.shell32.IsUserAnAdmin())))'],{windowsHide:true,timeout:10000});
+  const stdout = execFileSync(python,['-I','-B','-c',
+    'import ctypes; print(int(bool(ctypes.windll.shell32.IsUserAnAdmin())))'],{windowsHide:true,timeout:10000,encoding:'utf8'});
   return stdout.trim() === '0';
 }
 
-async function readActive(store) {
+function readActive(store) {
   try {
-    const value = JSON.parse(await fs.readFile(path.join(store,'active.json'),'utf8'));
+    const value = JSON.parse(disk.readFileSync(path.join(store,'active.json'),'utf8'));
     return typeof value.slot === 'string' && SLOT.test(value.slot) ? value : null;
   } catch(error) {
     if(error.code==='ENOENT' || error instanceof SyntaxError)return null;
@@ -39,9 +39,23 @@ async function readActive(store) {
   }
 }
 
+async function cleanRetired(store,running) {
+  const active=readActive(store)?.slot;
+  for(const entry of await fs.readdir(store,{withFileTypes:true})){
+    if(!entry.isDirectory()||entry.name===active||entry.name===running)continue;
+    const retired=/^(\d+\.\d+\.\d+-[a-f0-9]{32})\.retired-[a-f0-9]{32}$/.test(entry.name);
+    const directory=path.join(store,entry.name);
+    if(!retired){
+      if(!SLOT.test(entry.name))continue;
+      const marker=await fs.lstat(path.join(directory,'.toolkit-retired')).catch(()=>null);
+      if(!marker?.isFile())continue;
+    }
+    await fs.rm(directory,{recursive:true,force:true,maxRetries:2,retryDelay:100}).catch(()=>{});
+  }
+}
 async function prepareStore(executable, current) {
   const previous = slotStore(executable);
-  if(previous)return previous;
+  if(previous){await cleanRetired(previous,path.basename(path.dirname(executable)));return previous;}
   const installed = path.join(path.dirname(executable),STORE);
   try {
     await fs.mkdir(installed,{recursive:true});
@@ -50,38 +64,36 @@ async function prepareStore(executable, current) {
     await fs.rmdir(probe);
     return installed;
   } catch(error) {
-    if(!['EPERM','EACCES','EROFS'].includes(error.code) || !await standardToken(executable))throw error;
-    const personal=await personalStore(executable,current);
+    if(!['EPERM','EACCES','EROFS'].includes(error.code) || !standardToken(executable))throw error;
+    const personal=personalStore(executable,current);
     await fs.mkdir(personal,{recursive:true,mode:0o700});
     return personal;
   }
 }
 
-async function redirect(executable, version, args) {
-  if(slotStore(executable))return false;
+// Select the normal entry synchronously so Electron sees its main startup handlers before ready.
+function launchTarget(executable, version) {
+  if(slotStore(executable))return null;
   const installed=path.join(path.dirname(executable),STORE);
-  const personal=await personalStore(executable,version);
-  const candidates=[];
-  for(const store of [installed,personal]){
-    const active=await readActive(store);
-    if(!active)continue;
-    const candidateVersion=SLOT.exec(active.slot)[1];
-    if(!newer(candidateVersion,version))continue;
-    if(store===personal && !await standardToken(executable))continue;
-    candidates.push({version:candidateVersion,file:path.join(store,active.slot,EXE)});
+  const stores=[installed];
+  if(disk.existsSync(path.join(process.env.LOCALAPPDATA,'team-toolkit','installations'))){
+    stores.push(personalStore(executable,version));
   }
-  candidates.sort((a,b)=>newer(a.version,b.version)?-1:newer(b.version,a.version)?1:0);
-  for(const candidate of candidates){
-    try {
-      const child=spawn(candidate.file,args,{cwd:path.dirname(candidate.file),detached:true,stdio:'ignore'});
-      await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
-      child.unref();
-      return true;
-    } catch(error) {
-      if(!['ENOENT','ENOTDIR','EACCES','EPERM'].includes(error.code))throw error;
+  let selected=null;
+  for(const store of stores){
+    try{
+      const active=readActive(store);
+      if(!active)continue;
+      const next=SLOT.exec(active.slot)[1];
+      if(!newer(next,selected?.version||version))continue;
+      if(store!==installed&&!standardToken(executable))continue;
+      const file=path.join(store,active.slot,EXE);
+      if(disk.lstatSync(file).isFile())selected={version:next,file};
+    }catch(error){
+      if(!['ENOENT','ENOTDIR','EACCES','EPERM'].includes(error.code))console.warn('无法读取已安装的更新：',error.message);
     }
   }
-  return false;
+  return selected?.file||null;
 }
 
-module.exports={prepareStore,readActive,redirect,slotStore,EXE};
+module.exports={prepareStore,readActive,launchTarget,slotStore,EXE};

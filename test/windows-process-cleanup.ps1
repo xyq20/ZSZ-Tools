@@ -30,4 +30,8 @@ Assert (@(Get-ToolkitTargets @() @($root) @()).Count -eq 0) 'No process is a suc
 $privileged = @(Get-ToolkitTargets $processes @($root) @(19) $true | Sort-Object ProcessId)
 Assert (($privileged.ProcessId -join ',') -eq '10,11,12,20') 'UAC cleanup must only close registered toolbox binaries, never external descendants'
 Assert (-not (Test-ToolkitPath (P 23 1 'other.exe' ($root + 'resources\other.exe')) @($root) $true)) 'Elevated cleanup must reject arbitrary executables in resources'
+$slot = $root + '.toolkit-versions\0.4.35-' + ('a' * 32) + '\'
+Assert (Test-ToolkitPath (P 24 1 '钊叔工具箱.exe' ($slot + '钊叔工具箱.exe')) @($root) $true) 'Installer must recognize an installed version slot'
+Assert (-not (Test-ToolkitPath (P 25 1 'other.exe' ($slot + 'other.exe')) @($root) $true)) 'Version slot cleanup is scoped to known binaries'
+Assert (-not (Test-ToolkitPath (P 26 1 '钊叔工具箱.exe' ($root + '.toolkit-versions\other\钊叔工具箱.exe')) @($root) $true)) 'Unknown slot names are excluded'
 Write-Output 'PASS: Windows process selection, path boundaries, orphan children, protected installer/helper and PID reuse'

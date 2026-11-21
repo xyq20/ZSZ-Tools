@@ -15,7 +15,8 @@ function showUpdateWindow(){
 }
 const {restoreWindow}=require('./business/windows.cjs');
 app.on('activate',()=>restoreWindow(win));
-app.setPath('userData',path.join(app.getPath('appData'),'team-toolkit'));
+const userData=path.join(app.getPath('appData'),'team-toolkit');
+if(app.getPath('userData')!==userData)app.setPath('userData',userData);
 const ownsLock=app.requestSingleInstanceLock();
 if(!ownsLock){app.quit();}else{
 app.on('second-instance',()=>restoreWindow(win));
@@ -54,6 +55,11 @@ ipcMain.handle('main-window-ready',async event=>{
 });
 win.removeMenu();win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault());win.loadFile(path.join(__dirname,'app/index.html'));
 ipcMain.handle('choose-workbook',async()=>{const r=await dialog.showOpenDialog(win,{title:'选择 Excel 工作簿',buttonLabel:'打开',properties:['openFile'],filters:[{name:'Excel 工作簿',extensions:['xlsx']}]});return r.canceled?null:{name:path.basename(r.filePaths[0])};});
+}).catch(error=>{
+ const log=path.join(app.getPath('userData'),'startup.log');
+ try{require('node:fs').appendFileSync(log,new Date().toISOString()+' '+String(error.stack||error)+'\n',{mode:0o600});}catch{}
+ if(!updateLaunch)dialog.showErrorBox('工具箱启动未完成',error.message+'\n日志：'+log);
+ app.exit(1);
 });
 app.on('before-quit',e=>{
  if(updater?.isInstalling()){if(!updater.canQuit())e.preventDefault();return;}
