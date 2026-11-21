@@ -294,7 +294,9 @@ export class MaterialPage {
         if (!row) continue;
         const info = await one(row.locator('[class^="ProductCell_container__"]')) ??
           await one(row.locator('td').first());
-        const image = info && await one(info.locator('img'));
+        if (!info) continue;
+        const image = await one(info.locator('img[class^="ProductCell_cover__"], [class^="ProductCell_coverWrapper__"] img')) ??
+          await one(info.locator('img'));
         if (!image) continue;
         try {
           await image.scrollIntoViewIfNeeded({ timeout: 1500 });
