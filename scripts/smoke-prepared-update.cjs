@@ -33,15 +33,35 @@ async function pageAt(portNumber){
  const browser=await chromium.connectOverCDP(url);
  const context=browser.contexts()[0];
  const page=context.pages()[0]||await context.waitForEvent('page');
- await page.locator('#app-version').filter({hasText:/v\d/}).waitFor();
+ try{await page.locator('#app-version').filter({hasText:/v\d/}).waitFor();}
+ catch(error){console.error('Desktop page',page.url(),(await page.locator('body').innerText({timeout:1000}).catch(()=>'' )).slice(0,600));await browser.close().catch(()=>{});throw error;}
  return {browser,page};
 }
-async function stageOffer(portNumber,offer,payloadURL,payload){
+async function inMain(portNumber,expression,resume=false){
  const list=await until('local main-process inspector',async()=>{
   try{return (await (await fetch('http://127.0.0.1:'+portNumber+'/json/list')).json())[0];}catch{return null;}
  });
  const socket=new WebSocket(list.webSocketDebuggerUrl);
  await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
+ const messages=new Map();
+ let id=0;
+ socket.onmessage=event=>{
+  const result=JSON.parse(event.data),ready=messages.get(result.id);
+  if(ready){messages.delete(result.id);ready(result);}
+ };
+ const send=(method,params={})=>new Promise((resolve,reject)=>{
+  const request=++id,timer=setTimeout(()=>reject(Error('Inspector timeout: '+method)),12000);
+  messages.set(request,answer=>{clearTimeout(timer);resolve(answer);});
+  socket.send(JSON.stringify({id:request,method,params}));
+ });
+ try{
+  const answer=await send('Runtime.evaluate',{expression,returnByValue:true});
+  if(answer.error||answer.result?.exceptionDetails)throw Error(JSON.stringify(answer));
+  if(resume)await send('Runtime.runIfWaitingForDebugger');
+  return answer.result.result.value;
+ }finally{await new Promise(resolve=>{socket.onclose=resolve;socket.close();});}
+}
+async function stageOffer(portNumber,offer,payloadURL,payload){
  const inject=(args)=>{
   const load=process.getBuiltinModule('node:module').createRequire(process.resourcesPath+'/app.asar/bootstrap.cjs');
   const session=load('electron').session.fromPartition('toolkit-updates');
@@ -53,16 +73,8 @@ async function stageOffer(portNumber,offer,payloadURL,payload){
   };
   return 'draft attached';
  };
- try{
-  const expression='('+inject.toString()+')('+JSON.stringify({offer,payloadURL,payload,manifest:manifestUrl})+')';
-  const answer=new Promise((resolve,reject)=>{socket.onmessage=event=>{
-   const result=JSON.parse(event.data);if(result.id!==1)return;
-   if(result.error||result.result?.exceptionDetails)reject(Error(JSON.stringify(result)));
-   else resolve(result.result.result.value);
-  };});
-  socket.send(JSON.stringify({id:1,method:'Runtime.evaluate',params:{expression,returnByValue:true}}));
-  assert.equal(await answer,'draft attached');
- }finally{await new Promise(resolve=>{socket.onclose=resolve;socket.close();});}
+ const expression='('+inject.toString()+')('+JSON.stringify({offer,payloadURL,payload,manifest:manifestUrl})+')';
+ assert.equal(await inMain(portNumber,expression),'draft attached');
 }
 async function install(base,workspace){
  if(win){
@@ -118,9 +130,17 @@ async function verify(){
  const output=await fs.open(path.join(workspace,'app.log'),'a');
  let browser;
  try{
-  const old=spawn(executable,['--remote-debugging-port='+rendererPort,'--inspect=127.0.0.1:'+mainPort],{stdio:['ignore',output.fd,output.fd]});
+  const old=spawn(executable,['--remote-debugging-port='+rendererPort,'--inspect-brk=127.0.0.1:'+mainPort],{stdio:['ignore',output.fd,output.fd]});
   old.unref();
   console.log('Starting packaged baseline',before,'PID',old.pid);
+  const trace=path.join(workspace,'startup-errors.log');
+  const diagnose=function(file){
+   const fs=process.getBuiltinModule('node:fs');
+   const report=error=>fs.appendFileSync(file,String(error?.stack||error)+'\n');
+   process.on('unhandledRejection',report);process.on('uncaughtExceptionMonitor',report);
+   return true;
+  };
+  await inMain(mainPort,'('+diagnose.toString()+')('+JSON.stringify(trace)+')',true);
   const ui=await pageAt(rendererPort);browser=ui.browser;const page=ui.page;
   console.log('Baseline window available');
   page.on('pageerror',error=>console.error('Renderer:',error.message));
@@ -163,10 +183,10 @@ async function verify(){
  }catch(error){
   if(browser){const page=browser.contexts()[0]?.pages()[0];if(page)console.error('Update UI:',await page.locator('#update-status').textContent({timeout:1600}).catch(()=>''));}
   console.error('Update files:',await fs.readdir(directory).catch(()=>[]));
-  for(const file of [path.join(workspace,'app.log'),...['install.log','install-helper.log','healthy.failed'].map(name=>path.join(directory,name))]){
+  for(const file of [path.join(workspace,'app.log'),path.join(workspace,'startup-errors.log'),...['install.log','install-helper.log','healthy.failed'].map(name=>path.join(directory,name))]){
    console.error(path.basename(file),(await fs.readFile(file,'utf8').catch(()=>'' )).slice(-2200));
   }
   throw error;
  }finally{await output.close();if(browser)await Promise.race([browser.close().catch(()=>{}),delay(3000)]);}
 }
-verify().catch(error=>{console.error(error);process.exitCode=1;});
+verify().catch(error=>{console.error(error);process.exit(1);});
