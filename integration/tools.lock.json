@@ -257,6 +257,45 @@
           "sha256": "41bd13955c6f145e2d36033eba928d1b542712e4417116d6de6069df265b0ddd"
         }
       }
+    },
+    "taobao-soutu": {
+      "source": "../../../Documents/ChatGPT/搜推素材（小林）",
+      "commit": "05295e72fcd8352c95a66e778585293ca8f5fa67",
+      "dirty": false,
+      "files": {
+        "src/browser.mjs": {
+          "target": "modules/taobao-soutu/browser.mjs",
+          "sha256": "36f9a22786b9d34aa1dd40665c791bcde5532a782309d2e1d5f7d2bc940da340"
+        },
+        "src/materials.mjs": {
+          "target": "modules/taobao-soutu/materials.mjs",
+          "sha256": "e39a66427d3ec47860534b8aeb7e12396b13311db53532d3de6f6ab94f62ba49"
+        },
+        "src/state.mjs": {
+          "target": "modules/taobao-soutu/state.mjs",
+          "sha256": "d39ecdc513d473f742bece544a7ee35bac7a0e033d3a93429a1d56503b2cadcf"
+        },
+        "src/workflow.mjs": {
+          "target": "modules/taobao-soutu/workflow.mjs",
+          "sha256": "60d90918f453a39ad5d5f6d25872023185b1c3b0953e094fa48a527fb0d53764"
+        },
+        "src/ocr.mjs": {
+          "target": "modules/taobao-soutu/ocr.mjs",
+          "sha256": "7811bcd21d5b5a76c13989ecedf57de8599221c83a083d1a8b9dc955c55a5ec2"
+        },
+        "src/recognize.m": {
+          "target": "modules/taobao-soutu/recognize.m",
+          "sha256": "d7f34716386fbff3da74b4df09d0f89ba9bd89cbcf43a96603c7029106c1dd43"
+        },
+        "src/recognize.ps1": {
+          "target": "modules/taobao-soutu/recognize.ps1",
+          "sha256": "2607a7d959da14c23d03316b8cfc0c068f310e1516e91440e014b0e55ed5c893"
+        },
+        "config.example.json": {
+          "target": "modules/taobao-soutu/defaults.json",
+          "sha256": "fed73f0786e6148776ac3c27f9e58798be44de011b6ae62a68647df6122681fc"
+        }
+      }
     }
   }
 }

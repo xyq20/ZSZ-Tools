@@ -87,6 +87,19 @@
         "scripts/sycm_time.py": "business/sycm-python/sycm_time.py",
         "scripts/sycm_lock.py": "business/sycm-python/sycm_lock.py"
       }
+    },
+    "taobao-soutu": {
+      "source": "../../../Documents/ChatGPT/搜推素材（小林）",
+      "files": {
+        "src/browser.mjs": "modules/taobao-soutu/browser.mjs",
+        "src/materials.mjs": "modules/taobao-soutu/materials.mjs",
+        "src/state.mjs": "modules/taobao-soutu/state.mjs",
+        "src/workflow.mjs": "modules/taobao-soutu/workflow.mjs",
+        "src/ocr.mjs": "modules/taobao-soutu/ocr.mjs",
+        "src/recognize.m": "modules/taobao-soutu/recognize.m",
+        "src/recognize.ps1": "modules/taobao-soutu/recognize.ps1",
+        "config.example.json": "modules/taobao-soutu/defaults.json"
+      }
     }
   }
 }

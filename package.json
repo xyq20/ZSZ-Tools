@@ -1,13 +1,13 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.36",
+  "version": "0.4.37",
   "private": true,
   "main": "bootstrap.cjs",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:win": "electron-builder --win nsis zip --x64",
+    "dist:win": "node scripts/dist-windows.cjs",
     "prepare:runtimes": "node scripts/prepare-runtimes.cjs",
     "test": "node --test test/*.test.cjs",
     "tools:sync": "node scripts/sync-tools.cjs",
@@ -26,7 +26,7 @@
   "build": {
     "appId": "local.team.toolkit",
     "productName": "钊叔工具箱",
-    "afterPack": "scripts/pack-taobao-reminder-defaults.cjs",
+    "afterPack": "scripts/pack-app-resources.cjs",
     "electronLanguages": [
       "zh-CN",
       "zh_CN"
@@ -131,6 +131,9 @@
         "from": "business/hot_update.py",
         "to": "toolkit-update.py"
       }
+    ],
+    "asarUnpack": [
+      "node_modules/@img/**/*"
     ]
   },
   "dependencies": {
@@ -138,6 +141,7 @@
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.2",
     "jszip": "^3.10.1",
-    "playwright-core": "1.56.1"
+    "playwright-core": "1.56.1",
+    "sharp": "0.35.5"
   }
 }

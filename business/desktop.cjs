@@ -55,9 +55,11 @@ function setupBusiness(win,app){
  handle('business-taobao-reminders-run-now',()=>exclusive(reminders.runNow));
  const stock=require('./taobao-stock.cjs').createTaobaoStockTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('taobao-stock',message)});
  for(const [action,method] of [['login','login'],['verify-login','verifyLogin'],['choose','choose'],['start','start'],['resume','resume'],['report','openReport']])handle('business-taobao-stock-'+action,(...args)=>exclusive(()=>stock[method](...args)));
+ const soutu=require('./taobao-soutu.cjs').createTaobaoSoutuTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('taobao-soutu',message)});
+ for(const [action,method] of [['login','login'],['choose','choose'],['scan','scan'],['plan','plan'],['publish','publish'],['history','history'],['resolve','resolvePending'],['archive','openArchive']])handle('business-taobao-soutu-'+action,(...args)=>exclusive(()=>soutu[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});
- return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();},isBusy:()=>busy};
+ return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();await soutu.cleanup();},isBusy:()=>busy};
 }
 module.exports={setupBusiness};

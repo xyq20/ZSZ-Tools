@@ -2,32 +2,34 @@
   <div class="sidebar-brand"><h2><i aria-hidden="true">▦</i> 钊叔工具箱</h2><small>TEAM TOOLKIT</small></div>
   <nav aria-label="工作空间">
     <div class="nav-label">工作空间</div>
-    <button data-view="home" class="active overview-link" aria-current="page"><span aria-hidden="true">▦</span> 项目总览 <span class="nav-count">5</span></button>
+    <button data-view="home" class="active overview-link" aria-current="page"><span aria-hidden="true">▦</span> 项目总览 <span class="nav-count">6</span></button>
     <div class="nav-label">按使用人</div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><strong>丹姐</strong></div><button data-view="report" class="nav-tool"><span>销售月报</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><strong>三公</strong></div><button data-view="price" class="nav-tool"><span>批量导入价格</span></button><button data-view="taobao-stock" class="nav-tool"><span>自动库存填写</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-monthly" aria-hidden="true">双</span><strong>双姐</strong></div><button data-view="monthly" class="nav-tool"><span>分级总表</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><strong>谭</strong></div><button data-view="taobao" class="nav-tool"><span>淘宝素材上传</span></button><button data-view="taobao-reminders" class="nav-tool"><span>淘宝商品提醒</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-sycm" aria-hidden="true">董</span><strong>董卓</strong></div><button data-view="sycm" class="nav-tool"><span>生意参谋数据抓取</span></button></div>
+    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">林</span><strong>小林</strong></div><button data-view="taobao-soutu" class="nav-tool"><span>千牛搜推素材</span></button></div>
   </nav>
   <div class="bottom">共享工作台<p>所有同事使用同一工具库</p><small id="app-version">桌面版</small><button id="check-update">↻　检查更新</button></div>
 </aside>
 <main>
   <header>工作空间 / <span id="crumb">项目总览</span><span class="version">本地桌面工具</span></header>
   <section id="home" aria-labelledby="home-title">
-    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">5 位同事 <span aria-hidden="true">/</span> 7 个项目</span></div>
+    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">6 位同事 <span aria-hidden="true">/</span> 8 个项目</span></div>
     <div class="home-toolbar">
       <div class="owner-filters" role="group" aria-label="按使用人筛选">
-        <button data-owner-filter="all" aria-pressed="true">全部 <span>5</span></button>
+        <button data-owner-filter="all" aria-pressed="true">全部 <span>6</span></button>
         <button data-owner-filter="丹姐" aria-pressed="false">丹姐</button>
         <button data-owner-filter="三公" aria-pressed="false">三公</button>
         <button data-owner-filter="双姐" aria-pressed="false">双姐</button>
         <button data-owner-filter="谭" aria-pressed="false">谭</button>
         <button data-owner-filter="董卓" aria-pressed="false">董卓</button>
+        <button data-owner-filter="小林" aria-pressed="false">小林</button>
       </div>
       <input id="search" type="search" placeholder="搜索人名、工具或用途" aria-label="搜索人名、工具或用途">
     </div>
-    <div class="overview-caption"><span>人员与项目</span><span id="result-count" role="status" aria-live="polite">共 5 个项目</span></div>
+    <div class="overview-caption"><span>人员与项目</span><span id="result-count" role="status" aria-live="polite">共 8 个项目</span></div>
     <div class="owner-groups">
       <div class="owner-group" data-owner="丹姐" role="group" aria-labelledby="owner-report">
         <div class="owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><h2 id="owner-report">丹姐</h2><span class="owner-count">1 个项目</span></div>
@@ -95,6 +97,17 @@
           </article>
         </div>
       </div>
+      <div class="owner-group" data-owner="小林" role="group" aria-labelledby="owner-soutu">
+        <div class="owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">林</span><h2 id="owner-soutu">小林</h2><span class="owner-count">1 个项目</span></div>
+        <div class="cards">
+          <article data-search="小林 千牛 淘宝 搜推素材 图文 共享盘 归档" aria-labelledby="tool-soutu">
+            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-soutu">千牛搜推素材</h3></div>
+            <p>从共享盘选择款式，核对商品后发布图文，确认完成后归档。</p>
+            <div class="tags">搜推图文 · 分组发布</div>
+            <footer><span>复用本机千牛登录</span><button data-view="taobao-soutu" aria-label="进入小林的千牛搜推素材">进入工具 <span aria-hidden="true">→</span></button></footer>
+          </article>
+        </div>
+      </div>
     </div>
     <div id="empty" hidden><strong>没有找到对应项目</strong><p>试试其他人名、工具名称或用途。</p><button id="reset-filters">显示全部项目</button></div>
   </section>
@@ -120,4 +133,36 @@
   <p id="taobao-reminders-settings" aria-live="polite"></p>
   <p id="taobao-reminders-progress" role="status" aria-live="polite"></p>
   <pre id="taobao-reminders-result" hidden aria-label="淘宝巡检结果"></pre>
-</section><section id="sycm" hidden><h1>生意参谋数据抓取（董卓）</h1><p>登录生意参谋 → 选择分级总表 → 全量刷新数据 → 查看结果副本</p><div class="monthly-help"><details open><summary>使用说明</summary><ol><li>登录生意参谋，保存并关闭 Excel/WPS 中的总表。</li><li>选择总表，点击“开始新一轮”；中断后点击“继续上轮”。</li><li>完成后打开结果文件夹，查看表格和失败记录。</li></ol><p>遇滑块请手动通过。原表不改；续跑沿用上轮模式和筛选范围。</p></details><details><summary>逻辑说明</summary><ul><li>默认刷新粉、紫、黄、蓝商品的全部数据，已有值也更新。</li><li>先匹配名称；同名再核对货号，仍重复取排名最靠前的商品。</li><li>续跑只跳过本轮写入校验成功项；日期、表格或商品范围变化需新开一轮。</li><li>统计和月份命名按北京时间；成功更新的缺失流量渠道留空，失败项保留旧值并报告。</li><li>结果写入本机副本；失败或未处理完不会显示全部完成。</li></ul></details></div><div class="toolbar"><button id="sycm-login" data-job>登录生意参谋</button><button id="sycm-choose" data-job>选择分级总表</button><button id="sycm-start" data-job disabled>开始新一轮</button><button id="sycm-resume" data-job>继续上轮</button><button id="sycm-results" data-job>打开结果文件夹</button></div><div class="form"><label>抓取内容<select id="sycm-mode" data-job><option value="all">全部数据</option><option value="charts">曲线与流量</option><option value="flow">仅流量</option><option value="main-pic">仅主图分析</option></select></label><label>商品底色<select id="sycm-color" data-job><option value="default">粉、紫、黄、蓝（默认）</option><option value="all">全部六种颜色</option></select></label><label>指定商品（可选）<input id="sycm-name" data-job placeholder="多个商品名称用逗号分隔"></label></div><p id="sycm-book">未选择分级总表</p><p id="sycm-progress" role="status" aria-live="polite">首次使用需要手动登录。抓取过程只调用同源接口，滑块由你手动处理。</p><pre id="sycm-log" aria-label="运行日志"></pre></section><div class="status">● 本地工作台<span>工具内嵌 · 统一入口</span></div></main><div role="status" id="toast" hidden></div><dialog id="update-dialog" aria-labelledby="update-title"><h2 id="update-title">检查更新</h2><p id="update-status" role="status" aria-live="polite"></p><div id="update-download-progress" hidden><div class="update-progress-heading"><span id="update-progress-label">下载进度</span><strong id="update-percent">0%</strong></div><progress id="update-progress-bar" max="100" value="0" aria-labelledby="update-progress-label"></progress><div id="update-transfer-detail"></div></div><details id="update-notes-details" hidden><summary>更新日志</summary><pre id="update-notes"></pre></details><div class="dialog-actions"><button id="close-update">关闭</button><button id="cancel-update" hidden>取消下载</button><button id="download-update" hidden>下载更新</button><button id="install-update" hidden>重启更新</button></div></dialog><script src="ui.js"></script></body></html>
+</section><section id="sycm" hidden><h1>生意参谋数据抓取（董卓）</h1><p>登录生意参谋 → 选择分级总表 → 全量刷新数据 → 查看结果副本</p><div class="monthly-help"><details open><summary>使用说明</summary><ol><li>登录生意参谋，保存并关闭 Excel/WPS 中的总表。</li><li>选择总表，点击“开始新一轮”；中断后点击“继续上轮”。</li><li>完成后打开结果文件夹，查看表格和失败记录。</li></ol><p>遇滑块请手动通过。原表不改；续跑沿用上轮模式和筛选范围。</p></details><details><summary>逻辑说明</summary><ul><li>默认刷新粉、紫、黄、蓝商品的全部数据，已有值也更新。</li><li>先匹配名称；同名再核对货号，仍重复取排名最靠前的商品。</li><li>续跑只跳过本轮写入校验成功项；日期、表格或商品范围变化需新开一轮。</li><li>统计和月份命名按北京时间；成功更新的缺失流量渠道留空，失败项保留旧值并报告。</li><li>结果写入本机副本；失败或未处理完不会显示全部完成。</li></ul></details></div><div class="toolbar"><button id="sycm-login" data-job>登录生意参谋</button><button id="sycm-choose" data-job>选择分级总表</button><button id="sycm-start" data-job disabled>开始新一轮</button><button id="sycm-resume" data-job>继续上轮</button><button id="sycm-results" data-job>打开结果文件夹</button></div><div class="form"><label>抓取内容<select id="sycm-mode" data-job><option value="all">全部数据</option><option value="charts">曲线与流量</option><option value="flow">仅流量</option><option value="main-pic">仅主图分析</option></select></label><label>商品底色<select id="sycm-color" data-job><option value="default">粉、紫、黄、蓝（默认）</option><option value="all">全部六种颜色</option></select></label><label>指定商品（可选）<input id="sycm-name" data-job placeholder="多个商品名称用逗号分隔"></label></div><p id="sycm-book">未选择分级总表</p><p id="sycm-progress" role="status" aria-live="polite">首次使用需要手动登录。抓取过程只调用同源接口，滑块由你手动处理。</p><pre id="sycm-log" aria-label="运行日志"></pre></section><section id="taobao-soutu" hidden aria-labelledby="soutu-title">
+  <h1 id="soutu-title">千牛搜推素材（小林）</h1>
+  <p>选择共享盘的「搜推素材」，勾选本批分组并核对商品。每组图片发布一篇图文。</p>
+  <div class="toolbar">
+    <button id="taobao-soutu-login" data-job>打开千牛 / 登录</button>
+    <button id="taobao-soutu-choose" data-job>选择素材目录</button>
+    <button id="taobao-soutu-scan" data-job disabled>刷新待办</button>
+    <button id="taobao-soutu-plan" data-job disabled>核对所选商品</button>
+    <button id="taobao-soutu-publish" data-job disabled>发布已核对分组</button>
+  </div>
+  <p id="taobao-soutu-folder">尚未选择目录</p>
+  <p id="taobao-soutu-progress" role="status" aria-live="polite">同名商品可填写核对过的商品 ID。整款确认完成后将移入「已上」。</p>
+  <div id="taobao-soutu-selection" class="result-table" hidden>
+    <table>
+      <thead><tr>
+        <th><input id="taobao-soutu-all" type="checkbox" data-job aria-label="全选待办分组"></th>
+        <th>素材组</th><th>图片</th><th>商品 ID（可选）</th><th>状态 / 商品</th>
+      </tr></thead>
+      <tbody id="taobao-soutu-rows"></tbody>
+    </table>
+  </div>
+  <div class="toolbar">
+    <button id="taobao-soutu-history" data-job>发布记录</button>
+    <button id="taobao-soutu-resolve" data-job>核对待确认记录</button>
+    <button id="taobao-soutu-archive" data-job disabled>打开「已上」</button>
+  </div>
+  <div id="taobao-soutu-history-table" class="result-table"></div>
+  <details id="taobao-soutu-run-log" hidden>
+    <summary>本批运行记录</summary>
+    <pre id="taobao-soutu-log" aria-label="搜推素材运行记录"></pre>
+  </details>
+</section>
+<div class="status">● 本地工作台<span>工具内嵌 · 统一入口</span></div></main><div role="status" id="toast" hidden></div><dialog id="update-dialog" aria-labelledby="update-title"><h2 id="update-title">检查更新</h2><p id="update-status" role="status" aria-live="polite"></p><div id="update-download-progress" hidden><div class="update-progress-heading"><span id="update-progress-label">下载进度</span><strong id="update-percent">0%</strong></div><progress id="update-progress-bar" max="100" value="0" aria-labelledby="update-progress-label"></progress><div id="update-transfer-detail"></div></div><details id="update-notes-details" hidden><summary>更新日志</summary><pre id="update-notes"></pre></details><div class="dialog-actions"><button id="close-update">关闭</button><button id="cancel-update" hidden>取消下载</button><button id="download-update" hidden>下载更新</button><button id="install-update" hidden>重启更新</button></div></dialog><script src="ui.js"></script></body></html>

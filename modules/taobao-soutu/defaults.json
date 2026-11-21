@@ -1,0 +1,21 @@
+{
+  "source": "/Volumes/美工文件/搜推素材",
+  "materialUrl": "https://myseller.taobao.com/home.htm/material-center/material-management?tab=recommend",
+  "channel": "chrome",
+  "actionTimeoutMs": 15000,
+  "uploadTimeoutMs": 90000,
+  "maxAttempts": 3,
+  "retryDelayMs": 3000,
+  "jobDelayMs": 5000,
+  "shopText": "",
+  "ocr": true,
+  "itemIds": {},
+  "selectors": {
+    "row": "",
+    "emptySlot": "",
+    "drawer": "",
+    "uploadThumb": "",
+    "uploadTrigger": "",
+    "success": ""
+  }
+}

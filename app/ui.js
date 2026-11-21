@@ -1,5 +1,5 @@
-const views=['home','report','price','monthly','taobao','taobao-reminders','taobao-stock','sycm'];
-const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒','taobao-stock':'三公 / 自动库存填写',sycm:'董卓 / 生意参谋数据抓取'};
+const views=['home','report','price','monthly','taobao','taobao-reminders','taobao-stock','taobao-soutu','sycm'];
+const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒','taobao-stock':'三公 / 自动库存填写','taobao-soutu':'小林 / 千牛搜推素材',sycm:'董卓 / 生意参谋数据抓取'};
 const stockSection=document.createElement('section');
 stockSection.id='taobao-stock';stockSection.hidden=true;
 stockSection.innerHTML='<h1>自动库存填写（三公）</h1><p>中古Remake商店 · 按 Excel 二店名称和 SKU 商家编码同步库存</p><div class="toolbar"><button id="taobao-stock-login" data-job>打开二店登录</button><button id="taobao-stock-verify-login" data-job>检查登录</button><button id="taobao-stock-choose" data-job>选择库存 Excel</button><button id="taobao-stock-start" data-job>开始填写库存</button><button id="taobao-stock-resume" data-job>继续未完成任务</button><button id="taobao-stock-report" data-job>查看简洁报告</button></div><p id="taobao-stock-book">尚未选择库存表</p><p id="taobao-stock-progress" role="status" aria-live="polite">登录和任务记录保存在本机。任务中断后可继续处理。</p>';
@@ -87,13 +87,14 @@ installButton.addEventListener('click',async()=>{installButton.disabled=true;try
 let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;
 let independentReminder=false;
+let soutuDirectory=false,soutuReady=false;
 let busy=false,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false,hasStockBook=false;
 const statusFor=tool=>document.getElementById(tool+'-progress');
-function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;document.getElementById('taobao-reminders-enabled').disabled=busy||independentReminder;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;document.getElementById('taobao-stock-start').disabled=busy||!hasStockBook;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
+function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;refreshSoutuActions();document.getElementById('taobao-reminders-enabled').disabled=busy||independentReminder;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;document.getElementById('taobao-stock-start').disabled=busy||!hasStockBook;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
 async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
-window.desktop?.onProgress(p=>{statusFor(p.tool).textContent=p.message;if(p.tool==='sycm'){const log=document.getElementById('sycm-log');log.textContent=(log.textContent+p.message+'\n').slice(-30000);log.scrollTop=log.scrollHeight;}});
+window.desktop?.onProgress(p=>{statusFor(p.tool).textContent=p.message;if(['sycm','taobao-soutu'].includes(p.tool)){const log=document.getElementById(p.tool+'-log');if(p.tool==='taobao-soutu')document.getElementById('taobao-soutu-run-log').hidden=false;log.textContent=(log.textContent+p.message+'\n').slice(-30000);log.scrollTop=log.scrollHeight;}});
 for(const button of document.querySelectorAll('[data-login]'))button.addEventListener('click',async()=>{const tool=button.dataset.login;try{await call('login',tool);statusFor(tool).textContent='请在登录窗口完成登录，返回后点击查询。';}catch(e){statusFor(tool).textContent=e.message;}});
 document.getElementById('choose').addEventListener('click',()=>run('price',async()=>{const b=await call('choose');if(!b)return;hasBook=true;hasPrices=false;hasFillablePrices=false;document.getElementById('book').textContent=`${b.name} · ${b.sheet} · ${b.rows} 行`;document.getElementById('price-results').replaceChildren();statusFor('price').textContent=`文件已读取：待补价格 ${b.pending} 行，已有内容或公式 ${b.skipped} 行将跳过。`;}));
 document.getElementById('price-query').addEventListener('click',()=>run('price',async()=>{hasPrices=false;hasFillablePrices=false;document.getElementById('price-results').replaceChildren();statusFor('price').textContent='开始查询空白价格…';const rows=await call('price-query');hasPrices=true;table('price-results',['行','货号','商品名称','原价格','淘宝价格','状态','说明'],rows.map(r=>[r.row,r.code,r.name,r.original,r.price,r.status,r.reason]));const n=rows.filter(r=>r.status==='待填入').length,skipped=rows.filter(r=>['已有价格','公式保留'].includes(r.status)).length;hasFillablePrices=n>0;statusFor('price').textContent=`核对完成：跳过 ${skipped} 行，${n} 行可补价格，${rows.length-skipped-n} 行待核对。${n?'请核对结果后确认填入。':''}`;}));
@@ -202,6 +203,134 @@ document.getElementById('taobao-stock-resume').addEventListener('click',()=>run(
 document.getElementById('taobao-stock-report').addEventListener('click',()=>run('taobao-stock',async()=>{
  await call('taobao-stock-report');statusFor('taobao-stock').textContent='已打开最近一次简洁报告。';
 }));
+
+function soutuField(name) {
+  return document.getElementById('taobao-soutu-' + name);
+}
+
+function refreshSoutuActions() {
+  const choices = [...soutuField('rows').querySelectorAll('input[type="checkbox"]')];
+  const valid = choices.filter(input => input.closest('tr').dataset.valid === 'true');
+  const count = valid.filter(input => input.checked).length;
+  choices.forEach(input => { input.disabled = busy || input.closest('tr').dataset.valid !== 'true'; });
+  const all = soutuField('all');
+  all.disabled = busy || !valid.length;
+  all.checked = Boolean(valid.length && count === valid.length);
+  all.indeterminate = count > 0 && count < valid.length;
+  soutuField('scan').disabled = busy || !soutuDirectory;
+  soutuField('plan').disabled = busy || !count;
+  soutuField('publish').disabled = busy || !soutuReady;
+  soutuField('archive').disabled = busy || !soutuDirectory;
+}
+
+function renderSoutuFolder(result) {
+  if (!result) return;
+  soutuDirectory = true;
+  soutuReady = false;
+  const rows = soutuField('rows');
+  rows.replaceChildren();
+  const styles = new Set();
+  for (const { key, count, issue, color } of result.rows) {
+    styles.add(key.split('/')[0]);
+    const row = document.createElement('tr');
+    row.dataset.key = key;
+    row.dataset.valid = String(!issue);
+    const selected = document.createElement('input');
+    selected.type = 'checkbox';
+    selected.dataset.job = '';
+    selected.setAttribute('aria-label', '选择 ' + key);
+    const item = document.createElement('input');
+    item.type = 'text';
+    item.inputMode = 'numeric';
+    item.maxLength = 20;
+    item.placeholder = '自动匹配';
+    item.dataset.job = '';
+    item.setAttribute('aria-label', key + ' 的商品 ID');
+    for (const value of [selected, color ? `${key} · ${color}` : key, count, item, issue || '待核对']) {
+      const cell = document.createElement('td');
+      if (value instanceof HTMLElement) cell.append(value);
+      else cell.textContent = value;
+      row.append(cell);
+    }
+    rows.append(row);
+  }
+  soutuField('selection').hidden = !result.rows.length;
+  soutuField('folder').textContent = `${result.source} · ${styles.size} 款 / ${result.rows.length} 组待办`;
+}
+
+function renderSoutuHistory(records) {
+  table('taobao-soutu-history-table', ['素材组', '商品 ID', '素材 ID', '状态', '时间'], records.map(record => [
+    record.group, record.itemId, record.id || '', record.status === 'published' ? '已发布' : '待确认',
+    new Date(record.time).toLocaleString('zh-CN', { hour12: false }),
+  ]));
+}
+
+soutuField('all').addEventListener('change', event => {
+  const rows = soutuField('rows').querySelectorAll('tr[data-valid="true"] input[type="checkbox"]');
+  rows.forEach(input => { input.checked = event.target.checked; });
+  soutuReady = false;
+  refreshActions();
+});
+soutuField('rows').addEventListener('input', () => {
+  soutuReady = false;
+  refreshActions();
+});
+
+for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', 'resolve', 'archive']) {
+  soutuField(action).addEventListener('click', () => run('taobao-soutu', async () => {
+    const status = statusFor('taobao-soutu');
+    if (action === 'choose' || action === 'scan') {
+      const result = await call('taobao-soutu-' + action);
+      if (result) {
+        renderSoutuFolder(result);
+        status.textContent = result.rows.length ? '请选择本批分组，再核对商品。' : '当前目录没有待办素材。';
+      }
+      return;
+    }
+    if (action === 'plan') {
+      soutuReady = false;
+      const rows = [...soutuField('rows').rows];
+      const selected = rows.filter(row => row.querySelector('input[type="checkbox"]').checked).map(row => ({
+        key: row.dataset.key, itemId: row.querySelector('input[type="text"]').value.trim(),
+      }));
+      status.textContent = '正在核对所选商品…';
+      const result = await call('taobao-soutu-plan', selected);
+      const byKey = new Map(result.rows.map(row => [row.key, row]));
+      for (const row of rows) {
+        const info = byKey.get(row.dataset.key);
+        if (info) row.lastElementChild.textContent = [info.status, info.itemId, info.title, info.error].filter(Boolean).join(' · ');
+      }
+      soutuReady = result.ready;
+      status.textContent = result.pending
+        ? `「${result.pending}」有待确认记录，请先核对。`
+        : `匹配 ${result.matched} 组，另有 ${result.rows.length - result.matched} 组待核对。请检查商品 ID 和结果后再发布。`;
+      return;
+    }
+    if (action === 'publish') {
+      soutuField('log').textContent = '';
+      try {
+        const result = await call('taobao-soutu-publish');
+        if (result) {
+          renderSoutuFolder(result.folder);
+          status.textContent = `确认发布 ${result.completed} 组，归档 ${result.archived.length} 款。`;
+          renderSoutuHistory(await call('taobao-soutu-history'));
+        }
+      } catch (error) {
+        soutuReady = false;
+        try { renderSoutuHistory(await call('taobao-soutu-history')); } catch {}
+        throw error;
+      }
+      return;
+    }
+    const result = await call('taobao-soutu-' + action);
+    if (action === 'history') renderSoutuHistory(result);
+    else status.textContent = result.message;
+    if (action === 'resolve') {
+      soutuReady = false;
+      renderSoutuHistory(await call('taobao-soutu-history'));
+    }
+  }));
+}
 
 const reminderField = id => document.getElementById('taobao-reminders-' + id);
 function renderReminders(state) {
