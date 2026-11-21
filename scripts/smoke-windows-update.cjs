@@ -15,7 +15,10 @@ const exec = promisify(execFile);
 const updates = path.join(process.env.APPDATA || '', 'team-toolkit', 'updates');
 const cleanupLog = path.join(os.tmpdir(), 'toolkit-install-processes.log');
 const ps = command => exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command]);
-const versionOf = archive => JSON.parse(asar.extractFile(archive, 'package.json')).version;
+function versionOf(archive) {
+  asar.uncache(archive);
+  return JSON.parse(asar.extractFile(archive, 'package.json')).version;
+}
 
 async function waitFor(description, check, timeout = 45000) {
   const deadline = Date.now() + timeout;
@@ -58,11 +61,20 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
   const defaultsFile = path.join(installDir, 'resources', 'taobao-reminders-defaults.json');
   const directory = path.join(updates, version + '-win32-x64');
   const options = {cwd: root, stdio: 'ignore'};
-  const held = () => spawn(executable, ['-e', 'setInterval(() => {}, 1000)'], {
-    ...options, env: {...process.env, ELECTRON_RUN_AS_NODE: '1'},
-  });
+  async function holdExecutable() {
+    const child = spawn(executable, ['-e', 'process.stdout.write("ready");setInterval(() => {},1000)'], {
+      ...options, stdio: ['ignore','pipe','inherit'], env: {...process.env, ELECTRON_RUN_AS_NODE: '1'},
+    });
+    await new Promise((resolve,reject) => {
+      const timer = setTimeout(() => { child.kill(); reject(Error('Fixture did not acquire the executable')); },15000);
+      child.stdout.once('data',() => { clearTimeout(timer); resolve(); });
+      child.once('exit',() => { clearTimeout(timer); reject(Error('Fixture exited before handoff')); });
+      child.once('error',error => { clearTimeout(timer); reject(error); });
+    });
+    return child;
+  }
 
-  let marker, installerWindow, locked, old;
+  let marker, installerWindow, locked, old, cleanupFailure;
   try {
     assert.equal(await finished(spawn(baseFile, ['/S', '/currentuser', '/D=' + installDir], options)), 0);
     assert.equal(versionOf(archive), fromVersion);
@@ -76,23 +88,39 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
     // cleanup-only entry that Windows runs after an interactive UAC approval.
     installerWindow = spawn(targetFile, [], options);
     await windowReady(installerWindow);
-    locked = held();
-    const unlock = finished(locked);
-    const cleanup = spawn(targetFile, ['/S', '/toolkit-cleanup=' + installerWindow.pid], options);
-    assert.equal(await finished(cleanup), 0, 'registered-process cleanup failed');
-    await waitFor('registered process to exit', () => locked.exitCode !== null);
-    await unlock;
+    locked = await holdExecutable();
+    try {
+      const negative = await finished(spawn(targetFile, ['/S', '/toolkit-cleanup=0'], options));
+      console.log('Invalid cleanup caller returned', negative);
+      assert.equal(negative, 5, 'cleanup-only mode must reject an invalid caller');
+      const diagnostic = await ps(`
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        . ./build/stop-toolkit-processes.ps1 -LibraryOnly
+        $location = @(Get-ChildItem HKCU:\\Software | ForEach-Object { $_.GetValue('InstallLocation') } | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'resources\\app.asar')) })
+        $image = Get-CimInstance Win32_Process -Filter "ProcessId = ${locked.pid}"
+        $roots = @(Get-ToolkitRoots $location)
+        [pscustomobject]@{registered=$location; roots=$roots; processPath=$image.ExecutablePath; session=$image.SessionId; selected=(Test-ToolkitPath $image $roots $true)} | ConvertTo-Json -Compress
+      `);
+      console.log('Windows process identity', diagnostic.stdout.trim());
+      assert.equal(await finished(spawn(targetFile, ['/S', '/toolkit-cleanup=' + installerWindow.pid], options)), 0,
+        'registered-process cleanup failed');
+      await waitFor('registered process to exit', () => locked.exitCode !== null, 3000);
+      console.log('Privileged cleanup closed the registered executable.');
+    } catch (error) {
+      cleanupFailure = error;
+      console.error('Cleanup-only check:',error.message);
+      if (locked.exitCode === null) locked.kill();
+    }
     assert.equal(marker.exitCode, null);
     assert.equal(versionOf(archive), fromVersion, 'cleanup-only mode changed the installation');
     const closed = new Promise(resolve => installerWindow.once('exit', resolve));
     installerWindow.kill();
     await closed;
     installerWindow = null;
-    console.log('Privileged cleanup closed the registered executable and preserved the unrelated process.');
 
-    old = spawn(executable, [], options);
+    old = spawn(executable, [], {...options, cwd:installDir});
     await windowReady(old);
-    locked = held();
+    locked = await holdExecutable();
     await fs.mkdir(directory, {recursive: true});
     const file = path.join(directory, 'installer.exe');
     const runtime = path.join(directory, 'update-node.exe');
@@ -103,7 +131,7 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
     const token = crypto.randomBytes(16).toString('hex');
     const request = {parentPid: old.pid, file, info: info(candidate), executable, directory, token};
     await fs.writeFile(path.join(updates, 'pending.json'), JSON.stringify({version, directory, token}));
-    const apply = spawn(runtime, [helper, JSON.stringify(request)], {cwd: directory, stdio: 'inherit'});
+    const apply = spawn(runtime, [helper, JSON.stringify(request)], {cwd: installDir, stdio: 'inherit'});
     const applied = finished(apply);
     await waitFor('baseline helper to be ready', () =>
       fs.access(path.join(directory, 'helper-' + token + '.ready')).then(() => true, () => false));
@@ -120,6 +148,7 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
     await assert.rejects(fs.access(path.join(directory, 'helper-' + token + '.ready')), {code: 'ENOENT'});
     await assert.rejects(fs.access(path.join(updates, 'pending.json')), {code: 'ENOENT'});
     console.log('Confirmed real installer, relaunch and health acknowledgement:', fromVersion, '->', version);
+    if (cleanupFailure) throw cleanupFailure;
   } catch (error) {
     for (const log of [cleanupLog, path.join(directory, 'install.log'), path.join(directory, 'healthy.failed')]) {
       const detail = await fs.readFile(log, 'utf8').catch(() => '');
