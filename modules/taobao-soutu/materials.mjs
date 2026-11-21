@@ -117,15 +117,26 @@ function normalizeSearch(text) {
   return text.normalize('NFKC').replace(/\s+/g, '');
 }
 
+function readColors(text, searchKey) {
+  return (text.replaceAll(searchKey, '').match(titleColorPattern) ?? []).map(label => colorByAlias.get(label));
+}
+
+export function productColors(keyword, title, ocrText) {
+  const searchKey = normalizeSearch(keyword);
+  const ocr = normalizeSearch(ocrText ?? '');
+  return [
+    ...readColors(normalizeSearch(title), searchKey),
+    ...(ocr.includes(searchKey) ? readColors(ocr, searchKey) : []),
+  ];
+}
+
 export function selectProductId({ keyword, color }, products) {
   if (color) {
     const searchKey = normalizeSearch(keyword);
-    const readColors = text => (text.replaceAll(searchKey, '').match(titleColorPattern) ?? [])
-      .map(label => colorByAlias.get(label));
     const byColor = products.map(product => {
       const title = normalizeSearch(product.title);
       const ocr = normalizeSearch(product.ocrText ?? '');
-      return { id: product.id, labels: readColors(title), ocrLabels: ocr.includes(searchKey) ? readColors(ocr) : [] };
+      return { id: product.id, labels: readColors(title, searchKey), ocrLabels: ocr.includes(searchKey) ? readColors(ocr, searchKey) : [] };
     });
     const direct = byColor.filter(product => product.labels.includes(color));
     if (direct.length === 1) return direct[0].id;

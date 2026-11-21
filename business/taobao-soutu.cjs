@@ -136,9 +136,10 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
     const state = await core.readState(runtime);
     const resolved = [];
     const missing = [];
-    const matchedRow = ({ group, itemId, title }) => {
+    const matchedRow = ({ group, itemId, title, matchedColor }) => {
       const previous = state[core.productKey(group, itemId)];
-      return { key: group.key, itemId, title, status: previous?.status === 'published' ? '已发布，跳过提交' : '核对通过' };
+      const status = matchedColor ? `核对通过（图片颜色：${matchedColor}）` : '核对通过';
+      return { key: group.key, itemId, title, status: previous?.status === 'published' ? '已发布，跳过提交' : status };
     };
     const missingRow = (group, error) => ({ key: group.key, error: error.message, status: '待核对' });
     for (const [keyword, related] of Map.groupBy(jobs, job => job.group.keyword)) {

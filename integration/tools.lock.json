@@ -260,16 +260,20 @@
     },
     "taobao-soutu": {
       "source": "../../../Documents/ChatGPT/搜推素材（小林）",
-      "commit": "5358e63c8d9753ded0ddbfa052ce8f80b4e5572a",
+      "commit": "6493de1a4cfdff2560d2ecf7b65e324a61b1bdbf",
       "dirty": false,
       "files": {
         "src/browser.mjs": {
           "target": "modules/taobao-soutu/browser.mjs",
-          "sha256": "6cb3985affa7ac2fdce543f90c9face4c808492d19180ac248c03decf243460b"
+          "sha256": "2932a3092fe6c9f5a4a4b11a71987d4582296246f958c7fb599d8de702d02bb3"
         },
         "src/materials.mjs": {
           "target": "modules/taobao-soutu/materials.mjs",
-          "sha256": "e39a66427d3ec47860534b8aeb7e12396b13311db53532d3de6f6ab94f62ba49"
+          "sha256": "7283fcf9bdd830004f5004200b2a903c35f7d35e9dc13a36e27c783da0c0b869"
+        },
+        "src/image-color.mjs": {
+          "target": "modules/taobao-soutu/image-color.mjs",
+          "sha256": "972398f3c00c4ecf654efe5bd321419b770877ee93f5e4b886fb1601e482c4e0"
         },
         "src/state.mjs": {
           "target": "modules/taobao-soutu/state.mjs",
@@ -277,7 +281,7 @@
         },
         "src/workflow.mjs": {
           "target": "modules/taobao-soutu/workflow.mjs",
-          "sha256": "08e33a1dc013a2242dfda320296ed337bcb8872b749fedb653b0613bbe500aae"
+          "sha256": "2d086403c520b3f185735059ec5492d7c5922cd50f3c0f12c4c285893123c1a6"
         },
         "src/ocr.mjs": {
           "target": "modules/taobao-soutu/ocr.mjs",

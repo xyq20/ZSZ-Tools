@@ -284,6 +284,33 @@ export class MaterialPage {
     }
   }
 
+  async productPortraits(products) {
+    const images = new Map();
+    const frames = this.searchSurface ? [this.searchSurface.frame] : this.page.frames();
+    for (const { id } of products) {
+      await this.checkAccess();
+      for (const frame of frames) {
+        const row = await this.productRow(frame, id);
+        if (!row) continue;
+        const info = await one(row.locator('[class^="ProductCell_container__"]')) ??
+          await one(row.locator('td').first());
+        const image = info && await one(info.locator('img'));
+        if (!image) continue;
+        try {
+          await image.scrollIntoViewIfNeeded({ timeout: 1500 });
+          const loaded = await image.evaluate(element => element.complete &&
+            element.naturalWidth >= 48 && element.naturalHeight >= 48, null, { timeout: 1500 });
+          if (loaded) images.set(id, await image.screenshot({ scale: 'device', timeout: 2000 }));
+        } catch {
+          // An unavailable portrait leaves this candidate unresolved.
+        }
+        break;
+      }
+    }
+    await this.checkAccess();
+    return images;
+  }
+
   async productRow(frame, itemId, requireSlot = true) {
     const configured = this.config.selectors.row;
     if (configured) {
