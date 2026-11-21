@@ -1,17 +1,25 @@
 name: Verify Windows update
 on:
   workflow_dispatch:
+    inputs:
+      from_tag:
+        description: Published starting release for an online UI test (leave empty for the staged upgrade)
+        type: string
+        required: false
   push:
     branches:
       - 'codex/verify-windows-update/**'
 
 permissions:
-  # GitHub only exposes draft releases to identities with repository push access.
-  # Do not persist checkout credentials or pass the token to the installers.
-  contents: write
+  contents: read
 
 jobs:
   upgrade:
+    if: ${{ !inputs.from_tag }}
+    permissions:
+      # GitHub only exposes draft releases to identities with repository push access.
+      # The token is passed only to the fetch step.
+      contents: write
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
@@ -44,3 +52,29 @@ jobs:
       - name: Upgrade the installed application with a residual process
         shell: pwsh
         run: node scripts/smoke-windows-update.cjs "$env:RUNNER_TEMP/offer.json" "$env:RUNNER_TEMP/base.exe" "$env:RUNNER_TEMP/candidate.exe"
+
+  published:
+    if: ${{ inputs.from_tag != '' }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download the published starting version
+        shell: pwsh
+        env:
+          START_TAG: ${{ inputs.from_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:START_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag" }
+          $result = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:START_TAG"
+          if ($LASTEXITCODE) { throw "Starting release unavailable" }
+          $result | Set-Content "$env:RUNNER_TEMP/base.json" -Encoding utf8
+          $name = "-" + $env:START_TAG.Substring(1) + "-win-x64.exe"
+          gh release download $env:START_TAG --pattern $name --output "$env:RUNNER_TEMP/base.exe"
+          if ($LASTEXITCODE) { throw "Starting installer unavailable" }
+      - name: Check, download and restart through the installed Windows UI
+        shell: pwsh
+        run: node scripts/smoke-windows-update.cjs "$env:RUNNER_TEMP/base.json" "$env:RUNNER_TEMP/base.exe"

@@ -5,10 +5,12 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('node:net');
 const {spawn, execFile} = require('node:child_process');
 const {promisify} = require('node:util');
 const {setTimeout: delay} = require('node:timers/promises');
 const asar = require('@electron/asar');
+const {chromium} = require('playwright-core');
 const {verifyFile} = require('../business/windows-update.cjs');
 
 const exec = promisify(execFile);
@@ -44,23 +46,77 @@ async function windowReady(child) {
   });
 }
 
+async function installBaseline(baseFile, version) {
+  await assert.rejects(fs.access(path.dirname(updates)), {code: 'ENOENT'});
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'toolkit-upgrade-'));
+  const installDir = path.join(root, '工具箱');
+  const options = {cwd: root, stdio: 'ignore'};
+  assert.equal(await finished(spawn(baseFile, ['/S', '/currentuser', '/D=' + installDir], options)), 0);
+  const executable = path.join(installDir, '钊叔工具箱.exe');
+  const archive = path.join(installDir, 'resources', 'app.asar');
+  assert.equal(versionOf(archive), version);
+  console.log('Installed baseline', version);
+  return {installDir, executable, archive, options};
+}
+
+// Post-publication check. Drive the renderer buttons and let the unchanged
+// installed application discover, download, verify and apply the public release.
+async function verifyPublishedUpdate(release, baseFile) {
+  const from = release.tag_name.slice(1);
+  const version = require('../package.json').version;
+  const asset = release.assets.find(item => item.name === '-' + from + '-win-x64.exe');
+  await verifyFile(baseFile, {size:asset.size, sha256:asset.digest.slice(7)});
+  const {installDir, executable, archive} = await installBaseline(baseFile, from);
+  const socket = net.createServer();
+  await new Promise((resolve,reject) => socket.once('error',reject).listen(0,'127.0.0.1',resolve));
+  const port = socket.address().port;
+  await new Promise(resolve => socket.close(resolve));
+  const endpoint = 'http://127.0.0.1:' + port;
+  const old = spawn(executable, ['--remote-debugging-address=127.0.0.1','--remote-debugging-port=' + port],
+    {cwd:installDir, stdio:'ignore'});
+  const directory = path.join(updates,version+'-win32-x64');
+  let browser, page;
+  try {
+    await waitFor('installed app UI',() => fetch(endpoint+'/json/version').then(r=>r.ok,()=>false));
+    browser = await chromium.connectOverCDP(endpoint);
+    const context = browser.contexts()[0];
+    page = context.pages()[0] || await context.waitForEvent('page');
+    await page.locator('#check-update').click();
+    await page.locator('#download-update').waitFor({timeout:90000});
+    assert((await page.locator('#update-status').innerText()).includes('v'+version), 'unexpected online update offer');
+    await page.locator('#download-update').click();
+    await page.locator('#install-update').waitFor({timeout:360000});
+    assert.equal(await page.locator('#update-percent').innerText(),'100%');
+    console.log('Public offer found and downloaded through the installed UI:',version);
+    await page.locator('#install-update').click({noWaitAfter:true});
+    await waitFor('public update to relaunch', async () => {
+      const failure = await fs.readFile(path.join(directory,'healthy.failed'),'utf8').catch(()=>null);
+      if(failure)throw Error(failure);
+      return fs.access(path.join(directory,'healthy')).then(()=>true,()=>false);
+    },360000);
+    assert.equal(versionOf(archive),version);
+    await waitFor('helper to confirm the public upgrade',async () =>
+      (await fs.readFile(path.join(directory,'install.log'),'utf8').catch(()=>'')).includes('新版工具箱已启动'));
+    console.log('Public Windows UI upgrade verified:',from,'->',version);
+  } catch(error) {
+    if(page && !page.isClosed())console.error(await page.locator('#update-status').innerText().catch(()=>''));
+    throw error;
+  } finally {
+    if(browser)await browser.close().catch(()=>{});
+    if(old.exitCode===null && old.signalCode===null)old.kill();
+  }
+}
+
 async function verifyUpgrade(metadata, baseFile, targetFile) {
-  assert(process.platform === 'win32' && process.env.RUNNER_ENVIRONMENT === 'github-hosted',
-    'Use a disposable GitHub-hosted Windows runner.');
   const version = require('../package.json').version;
   const candidate = metadata.assets.find(asset => asset.name.endsWith('-' + version + '-win-x64.exe'));
   const baseline = metadata.assets.find(asset => /^test-from-([\d.]+)-win-x64\.exe$/.test(asset.name));
   const fromVersion = baseline.name.match(/^test-from-([\d.]+)/)[1];
   const info = asset => ({size: asset.size, sha256: asset.digest.replace(/^sha256:/, '')});
   await Promise.all([verifyFile(baseFile, info(baseline)), verifyFile(targetFile, info(candidate))]);
-  await assert.rejects(fs.access(path.dirname(updates)), {code: 'ENOENT'});
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'toolkit-upgrade-'));
-  const installDir = path.join(root, '工具箱');
-  const executable = path.join(installDir, '钊叔工具箱.exe');
-  const archive = path.join(installDir, 'resources', 'app.asar');
+  const {installDir, executable, archive, options} = await installBaseline(baseFile, fromVersion);
   const defaultsFile = path.join(installDir, 'resources', 'taobao-reminders-defaults.json');
   const directory = path.join(updates, version + '-win32-x64');
-  const options = {cwd: root, stdio: 'ignore'};
   async function holdExecutable() {
     const child = spawn(executable, ['-e', 'process.stdout.write("ready");setInterval(() => {},1000)'], {
       ...options, stdio: ['ignore','pipe','inherit'], env: {...process.env, ELECTRON_RUN_AS_NODE: '1'},
@@ -76,12 +132,9 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
 
   let marker, installerWindow, locked, old, cleanupFailure;
   try {
-    assert.equal(await finished(spawn(baseFile, ['/S', '/currentuser', '/D=' + installDir], options)), 0);
-    assert.equal(versionOf(archive), fromVersion);
     // Stand-in for settings present in an older internal installation.
     const oldDefaults = '{"fixture":"preserve-on-update"}';
     await fs.writeFile(defaultsFile, oldDefaults);
-    console.log('Installed baseline', fromVersion);
     marker = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], options);
 
     // Windows-hosted runners have an administrative token. Invoke the same
@@ -102,6 +155,7 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
         [pscustomobject]@{registered=$location; roots=$roots; processPath=$image.ExecutablePath; session=$image.SessionId; selected=(Test-ToolkitPath $image $roots $true)} | ConvertTo-Json -Compress
       `);
       console.log('Windows process identity', diagnostic.stdout.trim());
+      assert.equal(JSON.parse(diagnostic.stdout.trim()).selected,true,'registered process path was not recognized');
       assert.equal(await finished(spawn(targetFile, ['/S', '/toolkit-cleanup=' + installerWindow.pid], options)), 0,
         'registered-process cleanup failed');
       await waitFor('registered process to exit', () => locked.exitCode !== null, 3000);
@@ -163,7 +217,10 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
 }
 
 (async () => {
+  assert(process.platform === 'win32' && process.env.RUNNER_ENVIRONMENT === 'github-hosted',
+    'Use a disposable GitHub-hosted Windows runner.');
   const [manifest, baseline, candidate] = process.argv.slice(2);
   const metadata = JSON.parse((await fs.readFile(manifest, 'utf8')).replace(/^\uFEFF/, ''));
-  await verifyUpgrade(metadata, baseline, candidate);
+  if(candidate)await verifyUpgrade(metadata, baseline, candidate);
+  else await verifyPublishedUpdate(metadata,baseline);
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

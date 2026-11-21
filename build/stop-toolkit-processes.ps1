@@ -27,7 +27,8 @@ function Get-ToolkitRoots([string[]]$Candidates) {
 function Get-RegisteredToolkitRoots {
     $caller = Get-CimInstance Win32_Process -Filter "ProcessId = $InstallerPid"
     $sessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId
-    if (-not $caller -or $caller.ExecutablePath -ne $InstallerFile -or $caller.SessionId -ne $sessionId) {
+    if (-not $caller -or -not $caller.ExecutablePath -or $caller.SessionId -ne $sessionId -or
+        [IO.Path]::GetFullPath($caller.ExecutablePath) -ne [IO.Path]::GetFullPath($InstallerFile)) {
         throw '无法确认请求清理的安装器。'
     }
     $owner = Invoke-CimMethod -InputObject $caller -MethodName GetOwnerSid
@@ -53,12 +54,18 @@ function Get-RegisteredToolkitRoots {
 
 function Test-ToolkitPath($Process, [string[]]$Roots, [bool]$RegisteredOnly = $false) {
     if (-not $Process.ExecutablePath) { return $false }
+    # Win32_Process can report an 8.3 alias even when the registry root has
+    # already been expanded, e.g. RUNNER~1 vs runneradmin.
+    $image = $Process.ExecutablePath
+    if ($image.Contains('~')) {
+        try { $image = [IO.Path]::GetFullPath($image) } catch { return $false }
+    }
     foreach ($root in $Roots) {
-        if ($Process.ExecutablePath -eq ($root + '钊叔工具箱.exe')) { return $true }
+        if ($image -eq ($root + '钊叔工具箱.exe')) { return $true }
         if ($RegisteredOnly) {
-            if ($Process.ExecutablePath -in @(($root + 'resources\python\python.exe'),
+            if ($image -in @(($root + 'resources\python\python.exe'),
                 ($root + 'resources\python\Lib\site-packages\playwright\driver\node.exe'))) { return $true }
-        } elseif ($Process.ExecutablePath.StartsWith(($root + 'resources\'), [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        } elseif ($image.StartsWith(($root + 'resources\'), [StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
     return $false
 }
