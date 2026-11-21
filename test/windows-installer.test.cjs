@@ -3,6 +3,24 @@ const fsp=require('node:fs/promises'),os=require('node:os'),crypto=require('node
 const {setTimeout:delay}=require('node:timers/promises');
 const {acknowledgeUpdate,launchHelper}=require('../business/app-update.cjs');
 const powershell=process.platform==='win32'?'powershell.exe':process.env.TOOLKIT_TEST_PWSH;
+test('successful Windows startup retires old ready signals and preserves other updates',async t=>{
+ const root=await fsp.mkdtemp(path.join(os.tmpdir(),'toolkit-ready-'));
+ t.after(()=>fsp.rm(root,{recursive:true,force:true}));
+ const updates=path.join(root,'updates'),token='e'.repeat(32),ready='helper-'+token+'.ready';
+ for(const version of ['0.4.33','0.4.34','0.4.35']){
+  const directory=path.join(updates,version+'-win32-x64');await fsp.mkdir(directory,{recursive:true});
+  await fsp.writeFile(path.join(directory,ready),'ready');
+  await fsp.writeFile(path.join(directory,'install.log'),'preserved');
+ }
+ const directory=path.join(updates,'0.4.34-win32-x64');
+ await fsp.writeFile(path.join(updates,'pending.json'),JSON.stringify({version:'0.4.34',directory,token}));
+ await acknowledgeUpdate({getPath:()=>root,getVersion:()=> '0.4.34'},'win32');
+ for(const version of ['0.4.33','0.4.34','0.4.35']){
+  const base=path.join(updates,version+'-win32-x64');
+  assert.equal(fs.existsSync(path.join(base,ready)),version==='0.4.35');
+  assert.equal(await fsp.readFile(path.join(base,'install.log'),'utf8'),'preserved');
+ }
+});
 test('Windows cleanup executes its real PowerShell selection rules',{skip:!powershell},()=>{
  const output=execFileSync(powershell,['-NoProfile','-NonInteractive','-File',path.join(__dirname,'windows-process-cleanup.ps1')],{encoding:'utf8'});assert.match(output,/PASS:/);
 });

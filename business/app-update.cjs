@@ -10,7 +10,7 @@ const {execFile,spawn}=require('node:child_process');
 const {promisify}=require('node:util');
 const {setTimeout:delay}=require('node:timers/promises');
 const exec=promisify(execFile);
-const {fetchManifest,evaluateManifest}=require('../updater.cjs');
+const {fetchManifest,evaluateManifest,newer}=require('../updater.cjs');
 const REPO='/xyq20/ZSZ-Tools/releases/download/';
 function validateAsset(release,current,platform,arch){
  const result=evaluateManifest(release,current,platform,arch);
@@ -109,6 +109,14 @@ async function clearWindowsReadyFiles(directory){
  const names=await fs.readdir(directory);
  for(const name of names){
   if(/^helper-[a-f0-9]{32}\.ready$/.test(name))await fs.unlink(path.join(directory,name)).catch(error=>{if(error.code!=='ENOENT')throw error;});
+ }
+}
+async function clearCompletedWindowsAttempts(root,version){
+ for(const entry of await fs.readdir(root,{withFileTypes:true})){
+  const match=/^(\d+\.\d+\.\d+)-win32-(?:x64|arm64)$/.exec(entry.name);
+  if(entry.isDirectory()&&match&&!newer(match[1],version)){
+   await clearWindowsReadyFiles(path.join(root,entry.name));
+  }
  }
 }
 async function launchHelper({platform,directory,file,info,mac,token,executable,windowsNode},spawnProcess=spawn){
@@ -211,7 +219,7 @@ async function acknowledgeUpdate(app,platform=process.platform){
   if(platform==='darwin'&&!process.argv.includes('--toolkit-update-token='+value.token))return;
   await fs.writeFile(path.join(value.directory,'healthy'),'ok',{mode:0o600});await fs.rm(pending,{force:true});
   if(platform==='win32'){
-   await clearWindowsReadyFiles(value.directory).catch(()=>{});
+   await clearCompletedWindowsAttempts(root,value.version).catch(()=>{});
    await fs.rm(path.join(value.directory,'healthy.failed'),{force:true}).catch(()=>{});
   }
  }catch{}
