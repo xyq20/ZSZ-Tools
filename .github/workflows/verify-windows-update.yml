@@ -1,4 +1,4 @@
-name: Verify Windows update
+name: Verify desktop updates
 on:
   workflow_dispatch:
     inputs:
@@ -39,19 +39,66 @@ jobs:
           $tag = "v$version"
           $result = gh release view $tag --json isDraft,assets --jq '{draft:.isDraft,assets:[.assets[]|{name,size,digest}]}'
           if ($LASTEXITCODE) { throw "Could not read the staged release" }
-          $result | Set-Content "$env:RUNNER_TEMP/offer.json" -Encoding utf8
           $release = $result | ConvertFrom-Json
           if (!$release.draft) { throw "The candidate must still be a draft" }
-          $base = @($release.assets | Where-Object name -Match '^test-from-[\d.]+-win-x64\.exe$')
+          $prior = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" | ConvertFrom-Json
+          if ($LASTEXITCODE -or $prior.tag_name -notmatch '^v(\d+\.\d+\.\d+)$') { throw "Starting release unavailable" }
+          $from = $Matches[1]
+          $baseline = @($prior.assets | Where-Object name -EQ "-$from-win-x64.exe")
           $target = @($release.assets | Where-Object name -EQ "-$version-win-x64.exe")
-          if ($base.Count -ne 1 -or $target.Count -ne 1) { throw "Missing or ambiguous staged installer" }
-          gh release download $tag --pattern $base[0].name --output "$env:RUNNER_TEMP/base.exe"
-          if ($LASTEXITCODE) { throw "Could not download the baseline installer" }
+          if ($baseline.Count -ne 1 -or $target.Count -ne 1) { throw "Missing or ambiguous installer" }
+          $release.assets += [pscustomobject]@{name="test-from-$from-win-x64.exe";size=$baseline[0].size;digest=$baseline[0].digest}
+          $release | ConvertTo-Json -Depth 6 | Set-Content "$env:RUNNER_TEMP/offer.json" -Encoding utf8
+          gh release download $prior.tag_name --pattern $baseline[0].name --output "$env:RUNNER_TEMP/base.exe"
+          if ($LASTEXITCODE) { throw "Could not download the published baseline" }
           gh release download $tag --pattern $target[0].name --output "$env:RUNNER_TEMP/candidate.exe"
           if ($LASTEXITCODE) { throw "Could not download the candidate" }
       - name: Upgrade the installed application with a residual process
         shell: pwsh
         run: node scripts/smoke-windows-update.cjs "$env:RUNNER_TEMP/offer.json" "$env:RUNNER_TEMP/base.exe" "$env:RUNNER_TEMP/candidate.exe"
+
+  prepared:
+    if: ${{ !inputs.from_tag }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify rollback with the native helper
+        run: python -B test/hot_update_test.py
+      - name: Fetch the exact draft payload and the hot-capable starting fixture
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+          $result = gh release view $tag --json isDraft,assets --jq '{isDraft,assets:[.assets[]|{name,size,digest}]}'
+          if ($LASTEXITCODE) { throw "Draft lookup failed" }
+          $offer = $result | ConvertFrom-Json
+          if (!$offer.isDraft) { throw "Expected an unpublished candidate" }
+          $result | Set-Content "$env:RUNNER_TEMP/hot-offer.json" -Encoding utf8
+          $baseSuffix = if ($IsWindows) { "win-x64.exe" } else { "mac-arm64.dmg" }
+          $suffix = if ($IsWindows) { "win-x64.zip" } else { $baseSuffix }
+          $base = @($offer.assets | Where-Object name -Like "qa-start-*-$baseSuffix")
+          if ($base.Count -ne 1) { throw "Missing or ambiguous starting fixture" }
+          gh release download $tag --pattern $base[0].name --output "$env:RUNNER_TEMP/starting$([IO.Path]::GetExtension($baseSuffix))"
+          if ($LASTEXITCODE) { throw "Could not fetch the starting fixture" }
+          gh release download $tag --pattern "-$version-$suffix" --output "$env:RUNNER_TEMP/offered$([IO.Path]::GetExtension($suffix))"
+          if ($LASTEXITCODE) { throw "Could not fetch the candidate" }
+      - name: Measure prepared restart and verify the window and desktop entry
+        run: node scripts/smoke-prepared-update.cjs
 
   published:
     if: ${{ inputs.from_tag != '' }}

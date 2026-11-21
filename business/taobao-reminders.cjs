@@ -83,7 +83,7 @@ function macUpgradeDefaults(app, safeStorage, directory) {
   const pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
   if (pending.token !== token || pending.version !== app.getVersion()) return INITIAL;
   const appDirectory = path.resolve(app.getPath('exe'), '../../..');
-  const previous = path.join(path.dirname(appDirectory), '.toolkit-backup-' + token + '.app', 'Contents', 'Resources', DEFAULTS_FILE);
+  const previous = path.join(path.dirname(appDirectory), (pending.schema === 2 ? '.toolkit-update-' : '.toolkit-backup-') + token + '.app', 'Contents', 'Resources', DEFAULTS_FILE);
   if (!fs.existsSync(previous)) return INITIAL;
   const defaults = feishuDefaults(JSON.parse(fs.readFileSync(previous, 'utf8')));
   fs.mkdirSync(directory, {recursive: true, mode: 0o700});

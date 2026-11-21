@@ -6,20 +6,26 @@ const https=require('node:https');
 const crypto=require('node:crypto');
 const {pipeline}=require('node:stream/promises');
 const {Transform}=require('node:stream');
-const {execFile,spawn}=require('node:child_process');
-const {promisify}=require('node:util');
+const {spawn}=require('node:child_process');
+const {prepareHot,assertPrepared,launchHot}=require('./hot-update.cjs');
 const {setTimeout:delay}=require('node:timers/promises');
-const exec=promisify(execFile);
 const {fetchManifest,evaluateManifest,newer}=require('../updater.cjs');
 const REPO='/xyq20/ZSZ-Tools/releases/download/';
 function validateAsset(release,current,platform,arch){
  const result=evaluateManifest(release,current,platform,arch);
  if(result.status!=='available')return result;
- const asset=release.assets.find(a=>a.browser_download_url===result.download);
+ let asset=release.assets.find(a=>a.browser_download_url===result.download);
+ let kind=platform==='win32'?'windows-full':'mac-hot';
+ if(platform==='win32'){
+  const suffix=result.latest+'-win-'+arch+'.zip';
+  const packages=release.assets.filter(a=>a.name==='-'+suffix||a.name==='钊叔工具箱-'+suffix);
+  if(packages.length>1)throw Error('Windows 更新包重复');
+  if(packages.length){asset=packages[0];kind='windows-hot';}
+ }
  if(!asset||!Number.isSafeInteger(asset.size)||asset.size<=0||asset.size>2*1024**3||!/^sha256:[a-f0-9]{64}$/.test(asset.digest||''))throw Error('新版安装包缺少完整性校验信息，请稍后重试');
- const url=new URL(result.download);
- if(!url.pathname.startsWith(REPO+release.tag_name+'/'))throw Error('安装包版本与发布记录不一致');
- return {...result,size:asset.size,sha256:asset.digest.slice(7)};
+ const url=allowedURL(asset.browser_download_url,true);
+ if(decodeURIComponent(url.pathname)!==REPO+release.tag_name+'/'+asset.name||url.search||url.hash)throw Error('安装包版本与发布记录不一致');
+ return {...result,download:url.href,kind,size:asset.size,sha256:asset.digest.slice(7)};
 }
 function allowedURL(value,initial=false){
  const u=new URL(value);
@@ -50,50 +56,6 @@ async function downloadFile(info,file,{signal,onProgress=()=>{},getResponse=resp
   await fs.rename(partial,file);
  }catch(e){await fs.rm(partial,{force:true});throw e;}
 }
-async function prepareMac({file,directory,version,executable,token}){
- const target=path.resolve(executable,'../../..');
- if(!target.endsWith('.app')||target.includes('/AppTranslocation/')||target.startsWith('/Volumes/'))throw Error('请先将工具箱安装到“应用程序”后再更新');
- await fs.access(path.dirname(target),require('node:fs').constants.W_OK);
- const mount=path.join(directory,'mount'),staged=path.join(path.dirname(target),`.toolkit-update-${token}.app`),backup=path.join(path.dirname(target),`.toolkit-backup-${token}.app`);
- await fs.mkdir(mount,{recursive:true});
- let attached=false;
- try{
-  await exec('/usr/bin/hdiutil',['attach','-readonly','-nobrowse','-mountpoint',mount,file],{timeout:120000});attached=true;
-  const source=path.join(mount,'钊叔工具箱.app'),plist=path.join(source,'Contents/Info.plist');
-  const read=key=>exec('/usr/bin/plutil',['-extract',key,'raw','-o','-',plist]);
-  if((await read('CFBundleIdentifier')).stdout.trim()!=='local.team.toolkit'||(await read('CFBundleShortVersionString')).stdout.trim()!==version)throw Error('安装包内程序身份或版本不匹配');
-  const binary=(await read('CFBundleExecutable')).stdout.trim();if(binary!=='钊叔工具箱')throw Error('安装包启动程序不匹配');
-  await exec('/usr/bin/ditto',[source,staged],{timeout:180000});
-  return {target,staged,backup,binary};
- }catch(e){await fs.rm(staged,{recursive:true,force:true});throw e;}
- finally{if(attached)await exec('/usr/bin/hdiutil',['detach',mount],{timeout:30000}).catch(()=>{});}
-}
-function macScript(){return `#!/bin/sh
-set -eu
-parent="$1"; target="$2"; staged="$3"; backup="$4"; ack="$5"; token="$6"; binary="$7"
-i=0
-while kill -0 "$parent" 2>/dev/null; do
- i=$((i+1)); [ "$i" -lt 60 ] || exit 1
- sleep 1
-done
-/bin/mv "$target" "$backup"
-if ! /bin/mv "$staged" "$target"; then /bin/mv "$backup" "$target"; /usr/bin/open "$target"; exit 1; fi
-"$target/Contents/MacOS/$binary" "--toolkit-update-token=$token" >> "$ack.log" 2>&1 &
-child=$!
-i=0
-while [ "$i" -lt 60 ]; do
- if [ -f "$ack" ]; then /bin/rm -rf "$backup"; exit 0; fi
- kill -0 "$child" 2>/dev/null || break
- i=$((i+1)); sleep 1
-done
-kill "$child" 2>/dev/null || true
-sleep 2
-kill -9 "$child" 2>/dev/null || true
-/bin/mv "$target" "$staged"
-/bin/mv "$backup" "$target"
-printf '新版启动未完成，已恢复旧版。' > "$ack.failed"
-/usr/bin/open "$target"
-`;}
 async function waitForWindowsHelper(child,ready,log){
  const until=Date.now()+10000;
  while(child.exitCode===null&&child.signalCode===null&&Date.now()<until){
@@ -119,109 +81,173 @@ async function clearCompletedWindowsAttempts(root,version){
   }
  }
 }
-async function launchHelper({platform,directory,file,info,mac,token,executable,windowsNode},spawnProcess=spawn){
- const log=path.join(directory,'install.log');let command,args,ready;
- if(platform==='darwin'){
-  const helper=path.join(directory,'install.sh');await fs.writeFile(helper,macScript(),{mode:0o700});
-  command='/bin/sh';args=[helper,String(process.pid),mac.target,mac.staged,mac.backup,path.join(directory,'healthy'),token,mac.binary];
- }else{
-  await clearWindowsReadyFiles(directory);
-  const runtime=windowsNode||path.join(process.resourcesPath,'python/Lib/site-packages/playwright/driver/node.exe');
-  command=path.join(directory,'update-node.exe');
-  await fs.copyFile(runtime,command);
-  const helper=path.join(directory,'windows-update.cjs');
-  await fs.writeFile(helper,await fs.readFile(path.join(__dirname,'windows-update.cjs')),{mode:0o600});
-  ready=path.join(directory,'helper-'+token+'.ready');
-  args=[helper,JSON.stringify({parentPid:process.pid,file,info:{size:info.size,sha256:info.sha256},executable,directory,token})];
- }
- const helperLog=ready?path.join(directory,'install-helper.log'):log;
- const handle=await fs.open(helperLog,ready?'w':'a',0o600);
+async function launchHelper({platform,directory,file,info,token,executable,windowsNode},spawnProcess=spawn){
+ if(platform!=='win32')throw Error('完整安装助手仅支持 Windows');
+ await clearWindowsReadyFiles(directory);
+ const runtime=windowsNode||path.join(process.resourcesPath,'python/Lib/site-packages/playwright/driver/node.exe');
+ const command=path.join(directory,'update-node.exe');
+ await fs.copyFile(runtime,command);
+ const helper=path.join(directory,'windows-update.cjs');
+ await fs.writeFile(helper,await fs.readFile(path.join(__dirname,'windows-update.cjs')),{mode:0o600});
+ const ready=path.join(directory,'helper-'+token+'.ready');
+ const args=[helper,JSON.stringify({parentPid:process.pid,file,info:{size:info.size,sha256:info.sha256},executable,directory,token})];
+ const helperLog=path.join(directory,'install-helper.log');
+ const handle=await fs.open(helperLog,'w',0o600);
  try{
   const child=spawnProcess(command,args,{cwd:directory,detached:true,windowsHide:true,stdio:['ignore',handle.fd,handle.fd]});
   await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
-  if(ready)await waitForWindowsHelper(child,ready,helperLog);
+  await waitForWindowsHelper(child,ready,helperLog);
   child.unref();
  }finally{
   await handle.close();
-  if(ready)await fs.rm(ready,{force:true}).catch(()=>{});
+  await fs.rm(ready,{force:true}).catch(()=>{});
  }
 }
-function createUpdater({app,manifestUrl,business,notify=()=>{},confirm=async()=>true,platform=process.platform,arch=process.arch,fetchRelease=fetchManifest,getNetworkRoute=async()=>null,downloader=downloadFile,prepare=prepareMac,launch=launchHelper}){
- let state={status:'idle',current:app.getVersion()},info=null,file=null,directory=null,operation=null,controller=null,canQuit=false;
+async function atomicJSON(file, value) {
+ const temp=file+'.'+crypto.randomUUID()+'.tmp';
+ try {
+  await fs.writeFile(temp,JSON.stringify(value),{mode:0o600,flag:'wx'});
+  await fs.rename(temp,file);
+ } finally {await fs.rm(temp,{force:true});}
+}
+
+async function removePending(file,token) {
+ try {
+  const value=JSON.parse(await fs.readFile(file,'utf8'));
+  if(value.token===token)await fs.rm(file,{force:true});
+ } catch(error){if(error.code!=='ENOENT')throw error;}
+}
+
+function createUpdater({app,manifestUrl,business,notify=()=>{},platform=process.platform,arch=process.arch,
+ fetchRelease=fetchManifest,getNetworkRoute=async()=>null,downloader=downloadFile,prepare=prepareHot,
+ validatePrepared=assertPrepared,launch=launchHot,launchFull=launchHelper}) {
  const root=path.join(app.getPath('userData'),'updates');
+ const pending=path.join(root,'pending.json');
+ let state={status:'idle',current:app.getVersion()},info,file,directory,prepared,token,operation,controller;
+ let canQuit=false,disposed=false;
  const emit=patch=>{state={...state,...patch};notify({...state});return {...state};};
  const run=fn=>{if(operation)return operation;operation=fn().finally(()=>{operation=null;});return operation;};
+ async function discard(){
+  if(prepared){await fs.rm(prepared.staged,{recursive:true,force:true,maxRetries:4,retryDelay:100});prepared=null;}
+ }
  return {
   state:()=>({...state}),canQuit:()=>canQuit,isInstalling:()=>state.status==='installing',
-  check(){if(operation||state.status==='downloaded'||state.status==='installing')return operation||Promise.resolve({...state});return run(async()=>{
-   emit({status:'checking',message:'正在检查更新…'});
-   try{
-    info=validateAsset(await fetchRelease(manifestUrl),app.getVersion(),platform,arch);
-    let message='';
-    if(platform==='win32'&&info.status==='available'){
-     const failed=path.join(root,info.latest+'-'+platform+'-'+arch,'healthy.failed');
-     const reason=await fs.readFile(failed,'utf8').catch(()=>null);
-     if(reason)message='上次更新未完成：'+reason.trim().slice(0,1000)+'。可重试并复用已下载安装包。';
-    }
-    return emit({...info,message});
-   }
-   catch(e){info=null;return emit({status:'error',message:e.message});}
-  });},
-  download(){if(operation)return operation;if(state.status==='downloaded')return Promise.resolve({...state});return run(async()=>{
-   if(!info||info.status!=='available')throw Error('请先检查更新');
-   controller=new AbortController();emit({status:'downloading',percent:0,bytes:0,total:info.size,network:null,message:'正在下载更新…'});
-   try{
-    emit({network:await getNetworkRoute(info.download)});
-    directory=path.join(root,info.latest+'-'+platform+'-'+arch);await fs.mkdir(directory,{recursive:true,mode:0o700});
-    file=path.join(directory,platform==='darwin'?'installer.dmg':'installer.exe');
-    let cached=false;try{await verifyFile(file,info);cached=true;}catch{}
-    if(!cached)await downloader(info,file,{signal:controller.signal,onProgress:(bytes,total)=>emit({percent:Math.floor(bytes/total*100),bytes,total})});
-    return emit({status:'downloaded',percent:100,message:'下载并校验完成。请保存当前工作，然后点击「重启更新」。'});
-   }catch(e){return emit({status:'available',message:controller.signal.aborted?'下载已取消，可重新下载。':e.message,percent:0});}
-   finally{controller=null;}
-  });},
+  check(){
+   if(operation||['downloaded','installing'].includes(state.status))return Promise.resolve({...state});
+   return run(async()=>{
+    emit({status:'checking',message:'正在检查更新…'});
+    try{
+     info=validateAsset(await fetchRelease(manifestUrl),app.getVersion(),platform,arch);
+     let message='';
+     if(info.kind==='windows-full'&&require('./windows-versions.cjs').slotStore(app.getPath('exe'))){
+      info={...info,status:'unsupported'};message='此版本仅提供完整安装包，请从工具箱发布页下载安装，或稍后重新检查在线更新。';
+     }
+     if(info.status==='available'){
+      directory=path.join(root,info.latest+'-'+platform+'-'+arch);
+      const reason=await fs.readFile(path.join(directory,'healthy.failed'),'utf8').catch(()=>null);
+      if(reason)message='上次更新未完成：'+reason.trim().slice(0,1000)+'。可重新准备更新。';
+     }
+     return emit({...info,message});
+    }catch(error){info=null;return emit({status:'error',message:error.message});}
+   });
+  },
+  download(){
+   if(operation)return operation;
+   if(state.status==='downloaded'||disposed)return Promise.resolve({...state});
+   return run(async()=>{
+    if(!info||info.status!=='available')throw Error('请先检查更新');
+    controller=new AbortController();
+    const {signal}=controller;
+    emit({status:'downloading',percent:0,bytes:0,total:info.size,network:null,message:'正在下载更新…'});
+    try{
+     await discard();
+     await fs.mkdir(directory,{recursive:true,mode:0o700});
+     file=path.join(directory,info.kind==='mac-hot'?'installer.dmg':info.kind==='windows-hot'?'payload.zip':'installer.exe');
+     const cached=await verifyFile(file,info).then(()=>true,()=>false);
+     signal.throwIfAborted();
+     if(!cached){
+      emit({network:await getNetworkRoute(info.download)});
+      await downloader(info,file,{signal,onProgress:(bytes,total)=>emit({percent:Math.floor(bytes/total*100),bytes,total})});
+     }
+     signal.throwIfAborted();
+     token=crypto.randomBytes(16).toString('hex');
+     if(info.kind!=='windows-full'){
+      emit({status:'preparing',percent:100,message:'正在后台准备新版。可以关闭此窗口，继续使用工具箱。'});
+      prepared=await prepare({platform,file,directory,current:app.getVersion(),version:info.latest,
+       executable:app.getPath('exe'),resources:process.resourcesPath,token,signal});
+      signal.throwIfAborted();
+     }
+     return emit({status:'downloaded',percent:100,message:prepared?
+      '新版已准备好。保存当前工作后，点击「重启更新」即可打开新版。':
+      '此版本提供完整安装包。重启后将执行安装，完成后自动打开工具箱。'});
+    }catch(error){
+     await discard();
+     return emit({status:'available',message:signal.aborted?'下载已取消，可重新准备更新。':error.message,percent:0});
+    }finally{controller=null;}
+   });
+  },
   cancel(){controller?.abort();},
-  install(){if(operation)return operation;return run(async()=>{
-   if(state.status!=='downloaded'||!file)throw Error('请先下载更新');
-   if(!app.isPackaged)throw Error('请在已安装的工具箱中执行更新');
-   if(business.isBusy())throw Error('任务正在执行，请完成后再重启更新');
-   if(!await confirm())return {...state};
-   // Reserve the business gate before any asynchronous preparation or quit.
-   business.beginUpdate();emit({status:'installing',message:'正在准备更新，请稍候…'});
-   let mac;
-   try{
-    await verifyFile(file,info);
-    const token=crypto.randomBytes(16).toString('hex');
-    const executable=app.getPath('exe');
-    await fs.rm(path.join(directory,'healthy'),{force:true});await fs.rm(path.join(directory,'healthy.failed'),{force:true});
-    if(platform==='darwin')mac=await prepare({file,directory,version:info.latest,executable,token});
-    else if(platform!=='win32')throw Error('当前系统暂不支持自动安装');
-    emit({message:'正在保存本机登录状态…'});
-    await business.flushLogin();
-    await fs.writeFile(path.join(root,'pending.json'),JSON.stringify({version:info.latest,directory,token}),{mode:0o600});
-    if(platform==='win32')emit({message:'工具箱即将关闭。如 Windows 提示授权，请确认以关闭旧版进程，更新完成后会自动打开。'});
-    await launch({platform,directory,file,info,mac,token,executable});
-    canQuit=true;app.quit();return {...state};
-   }catch(e){if(mac)await fs.rm(mac.staged,{recursive:true,force:true});business.endUpdate();emit({status:'downloaded',message:'更新未启动：'+e.message});throw e;}
-  });},
+  async dispose(){disposed=true;controller?.abort();await operation?.catch(()=>{});if(!canQuit)await discard();},
+  install(){
+   if(operation)return operation;
+   return run(async()=>{
+    if(disposed||state.status!=='downloaded'||!file)throw Error('请先完成更新准备');
+    if(!app.isPackaged)throw Error('请在已安装的工具箱中执行更新');
+    if(business.isBusy())throw Error('任务正在执行，请完成后再重启更新');
+    const clickedAt=Date.now();
+    business.beginUpdate();
+    emit({status:'installing',message:'正在保存登录状态，即将打开新版…'});
+    try{
+     if(prepared){
+      try{await validatePrepared(prepared);}
+      catch(error){await discard();throw Error('已准备的新版文件有变化，请重新准备更新');}
+     }else{await verifyFile(file,info);}
+     await business.flushLogin({keepSchedule:true});
+     await Promise.all(['healthy','healthy.failed'].map(name=>fs.rm(path.join(directory,name),{force:true})));
+     const version=info.latest,executable=app.getPath('exe');
+     await atomicJSON(pending,{schema:prepared?2:1,version,directory,token,clickedAt});
+     if(prepared)await launch({platform,directory,version,prepared,token,executable,clickedAt});
+     else await launchFull({platform,directory,file,info,token,executable});
+     canQuit=true;app.quit();return {...state};
+    }catch(error){
+     business.endUpdate();
+     await removePending(pending,token);
+     emit({status:prepared||info.kind==='windows-full'?'downloaded':'available',message:'更新未启动：'+error.message});
+     throw error;
+    }
+   });
+  },
  };
 }
-async function acknowledgeUpdate(app,platform=process.platform){
+
+async function acknowledgeUpdate(app,platform=process.platform,windowState=null) {
  const root=path.join(app.getPath('userData'),'updates'),pending=path.join(root,'pending.json');
- try{
-  const value=JSON.parse(await fs.readFile(pending,'utf8'));
-  if(!/^\w{32}$/.test(value.token)||path.dirname(value.directory)!==root)return;
-  if(platform==='win32'&&value.version!==app.getVersion()){
-   const detail=await fs.readFile(path.join(value.directory,'healthy.failed'),'utf8').catch(()=>null);
-   if(detail){await fs.rm(pending,{force:true});await clearWindowsReadyFiles(value.directory).catch(()=>{});return {detail,log:path.join(value.directory,'install.log')};}
+ let value;
+ try{value=JSON.parse(await fs.readFile(pending,'utf8'));}catch(error){if(error.code==='ENOENT'||error instanceof SyntaxError)return;throw error;}
+ if(!/^[a-f0-9]{32}$/.test(value.token)||!/^\d+\.\d+\.\d+$/.test(value.version)||typeof value.directory!=='string'
+   ||path.dirname(value.directory)!==root||!['x64','arm64'].some(arch=>path.basename(value.directory)===value.version+'-'+platform+'-'+arch))return;
+ if(value.version!==app.getVersion()){
+  const detail=await fs.readFile(path.join(value.directory,'healthy.failed'),'utf8').catch(()=>null);
+  if(detail){
+   await removePending(pending,value.token);
+   if(platform==='win32')await clearWindowsReadyFiles(value.directory);
+   return {detail,log:path.join(value.directory,'install.log')};
   }
-  if(value.version!==app.getVersion())return;
-  if(platform==='darwin'&&!process.argv.includes('--toolkit-update-token='+value.token))return;
-  await fs.writeFile(path.join(value.directory,'healthy'),'ok',{mode:0o600});await fs.rm(pending,{force:true});
-  if(platform==='win32'){
-   await clearCompletedWindowsAttempts(root,value.version).catch(()=>{});
-   await fs.rm(path.join(value.directory,'healthy.failed'),{force:true}).catch(()=>{});
-  }
- }catch{}
+  return;
+ }
+ const launched=process.argv.includes('--toolkit-update-token='+value.token);
+ if(value.schema===2){
+  if(!launched||!windowState?.visible||!windowState.interactive)return;
+  await atomicJSON(path.join(value.directory,'window-'+value.token+'.json'),{...windowState,
+   token:value.token,version:value.version,pid:process.pid,executable:process.execPath,readyAt:Date.now()});
+  return;
+ }
+ if(platform==='darwin'&&!launched)return;
+ await fs.writeFile(path.join(value.directory,'healthy'),'ok',{mode:0o600});
+ await removePending(pending,value.token);
+ if(platform==='win32'){
+  await clearCompletedWindowsAttempts(root,value.version);
+  await fs.rm(path.join(value.directory,'healthy.failed'),{force:true});
+ }
 }
-module.exports={validateAsset,allowedURL,downloadFile,verifyFile,prepareMac,macScript,launchHelper,createUpdater,acknowledgeUpdate};
+module.exports={validateAsset,allowedURL,downloadFile,verifyFile,launchHelper,createUpdater,acknowledgeUpdate};

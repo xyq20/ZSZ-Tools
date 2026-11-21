@@ -66,14 +66,15 @@ test('staged update helper waits for exit, runs silently and reopens the toolbox
  t.after(()=>fsp.rm(root,{recursive:true,force:true}));
  const updates=path.join(root,'updates');
  for(const exitCode of [0,2,5]){
-  const directory=path.join(updates,String(exitCode));await fsp.mkdir(directory,{recursive:true});
+  const version='0.4.'+(32+exitCode);
+  const directory=path.join(updates,version+'-win32-x64');await fsp.mkdir(directory,{recursive:true});
   const file=path.join(directory,'installer.exe'),executable=path.join(directory,'toolbox.exe');
   const trace=path.join(directory,'trace'),healthy=path.join(directory,'healthy');
   const token='0'.repeat(32);
   const install='#!/bin/sh\nprintf "installer: %s\\n" "$*" >> "$TRACE"\nexit "$INSTALL_EXIT"\n';
   const reopen='#!/bin/sh\nprintf "toolbox: %s\\n" "$*" >> "$TRACE"\nif [ "$INSTALL_EXIT" = 0 ]; then printf ok > "$HEALTHY"; fi\n';
   await fsp.writeFile(file,install,{mode:0o700});await fsp.writeFile(executable,reopen,{mode:0o700});
-  await fsp.writeFile(path.join(updates,'pending.json'),JSON.stringify({version:'0.4.32',directory,token}));
+  await fsp.writeFile(path.join(updates,'pending.json'),JSON.stringify({version,directory,token}));
   const fixture={platform:'win32',directory,file,info:{sha256:crypto.createHash('sha256').update(install).digest('hex'),size:Buffer.byteLength(install)},token,executable,windowsNode:process.execPath};
   const driver=`require(${JSON.stringify(require.resolve('../business/app-update.cjs'))}).launchHelper(${JSON.stringify(fixture)}).catch(e=>{console.error(e);process.exitCode=1;})`;
   execFileSync(process.execPath,['-e',driver],{env:{...process.env,INSTALL_EXIT:String(exitCode),TRACE:trace,HEALTHY:healthy},timeout:12000});

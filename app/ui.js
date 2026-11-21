@@ -52,24 +52,26 @@ window.desktop?.getVersion().then(v=>document.getElementById('app-version').text
 const updateDialog=document.getElementById('update-dialog');
 document.getElementById('close-update').addEventListener('click',()=>updateDialog.close());
 function renderUpdate(r){
- const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'，下载完成后可重启更新。',downloaded:r.message||'下载并校验完成，可重启更新。',installing:r.message||'正在准备更新…'};
+ const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:r.message||'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'，可以关闭此窗口继续工作。',preparing:r.message,downloaded:r.message||'新版已准备好，可重启更新。',installing:r.message||'正在准备更新…'};
  updateStatus.textContent=messages[r.status]||'请重新检查更新。';
  const notes=document.getElementById('update-notes'),notesDetails=document.getElementById('update-notes-details');
  notes.textContent=r.notes||'';notesDetails.hidden=!r.notes;
  if(updateNotesVersion!==r.latest){notesDetails.open=false;updateNotesVersion=r.latest;}
- const progressVisible=['downloading','downloaded','installing'].includes(r.status);
+ const progressVisible=['downloading','preparing','downloaded','installing'].includes(r.status);
  document.getElementById('update-download-progress').hidden=!progressVisible;
  const percent=r.status==='downloading'?Math.min(100,Math.max(0,Number(r.percent)||0)):100;
- document.getElementById('update-progress-bar').value=percent;
- document.getElementById('update-percent').textContent=percent+'%';
- document.getElementById('update-progress-label').textContent=r.status==='downloaded'?'下载完成':r.status==='installing'?'准备更新':'下载进度';
+ const bar=document.getElementById('update-progress-bar');
+ if(r.status==='preparing')bar.removeAttribute('value');else bar.value=percent;
+ document.getElementById('update-percent').textContent=r.status==='preparing'?'':percent+'%';
+ document.getElementById('update-progress-label').textContent=r.status==='preparing'?'正在准备新版':r.status==='downloaded'?'更新已就绪':r.status==='installing'?'正在重启':'下载进度';
  const transferred=r.status==='downloading'?r.bytes:r.size;
  const route=r.network==='system-proxy'?'系统代理':r.network==='direct'?'直连':'';
  document.getElementById('update-transfer-detail').textContent=[r.total||r.size?updateSize(transferred)+' / '+updateSize(r.total||r.size):'',route].filter(Boolean).join(' · ');
  downloadButton.hidden=r.status!=='available';downloadButton.disabled=false;
  installButton.hidden=r.status!=='downloaded';installButton.disabled=false;
- cancelUpdateButton.hidden=r.status!=='downloading';
- checkButton.textContent=r.status==='downloaded'?'↻　更新已就绪':r.status==='downloading'?'↻　下载中 '+(r.percent||0)+'%':'↻　检查更新';
+ cancelUpdateButton.hidden=!['downloading','preparing'].includes(r.status);
+ cancelUpdateButton.textContent=r.status==='preparing'?'取消准备':'取消下载';
+ checkButton.textContent=r.status==='downloaded'?'↻　更新已就绪':r.status==='preparing'?'↻　正在准备新版':r.status==='downloading'?'↻　下载中 '+(r.percent||0)+'%':'↻　检查更新';
 }
 window.desktop?.onUpdate?.(renderUpdate);
 checkButton.addEventListener('click',async()=>{
@@ -250,4 +252,10 @@ reminderField('run-now').addEventListener('click', () => run('taobao-reminders',
  renderReminders({...state, message:'巡检完成。'});
  reminderField('result').textContent = state.message;
  reminderField('result').hidden = false;
+}));
+
+// Report readiness after all page handlers are registered and the controls have been painted.
+requestAnimationFrame(()=>requestAnimationFrame(()=>{
+ if(checkButton.isConnected&&!checkButton.disabled&&checkButton.getBoundingClientRect().width>0)
+  window.desktop?.mainWindowReady?.().catch(error=>console.error(error));
 }));

@@ -58,6 +58,6 @@ function setupBusiness(win,app){
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});
- return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async()=>{reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();},isBusy:()=>busy};
+ return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();},isBusy:()=>busy};
 }
 module.exports={setupBusiness};

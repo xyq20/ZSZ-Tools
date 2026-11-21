@@ -7,6 +7,12 @@ const {createUpdater,acknowledgeUpdate,downloadFile}=require('./business/app-upd
 const updateConfig=require('./update-config.json');
 let win,updater;
 let business,quitting=false;
+const updateLaunch=process.argv.some(arg=>/^--toolkit-update-token=[a-f0-9]{32}$/.test(arg)||arg==='--updated'||arg==='--toolkit-rollback');
+function showUpdateWindow(){
+ if(!win||win.isDestroyed())return;
+ if(process.platform==='darwin')app.focus({steal:true});
+ restoreWindow(win);win.moveTop();win.focus();
+}
 const {restoreWindow}=require('./business/windows.cjs');
 app.on('activate',()=>restoreWindow(win));
 app.setPath('userData',path.join(app.getPath('appData'),'team-toolkit'));
@@ -29,13 +35,22 @@ win=new BrowserWindow({width:1280,height:850,minWidth:1000,minHeight:680,backgro
 business=require('./business/desktop.cjs').setupBusiness(win,app);
 const updateNetwork=createUpdateNetwork(require('electron').session.fromPartition('toolkit-updates'));
 updater=createUpdater({app,manifestUrl:updateConfig.manifestUrl,business,fetchRelease:updateNetwork.manifest,getNetworkRoute:updateNetwork.route,downloader:(info,file,options)=>downloadFile(info,file,{...options,getResponse:updateNetwork.response}),
- notify:data=>{if(!win.isDestroyed())win.webContents.send('update-progress',data);},
- confirm:async()=>{if(process.platform==='win32')return true;const r=await dialog.showMessageBox(win,{type:'question',buttons:['稍后','重启更新'],defaultId:0,cancelId:0,message:'现在重启工具箱并更新？',detail:'请先保存预览结果，并处理尚未发布的淘宝批次。登录和配置会保留。'});return r.response===1;}
+ notify:data=>{if(!win.isDestroyed())win.webContents.send('update-progress',data);}
 });
 win.on('close',e=>{if(updater.isInstalling()&&!updater.canQuit())e.preventDefault();});
-win.webContents.once('did-finish-load',async()=>{
- const failure=await acknowledgeUpdate(app);
- if(failure&&!win.isDestroyed())await dialog.showMessageBox(win,{type:'error',message:'工具箱更新未完成',detail:`${failure.detail}\n日志：${failure.log}`});
+if(updateLaunch)win.once('ready-to-show',showUpdateWindow);
+ipcMain.handle('main-window-ready',async event=>{
+ if(win.isDestroyed()||event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)return;
+ if(updateLaunch)showUpdateWindow();
+ if(updateLaunch&&!win.isFocused()){
+  await new Promise(resolve=>setTimeout(resolve,100));
+  showUpdateWindow();
+ }
+ if(win.isDestroyed())return;
+ const visible=win.isVisible()&&!win.isMinimized();
+ if(updateLaunch&&visible&&!win.isFocused()&&process.platform==='win32')win.flashFrame(true);
+ const failure=await acknowledgeUpdate(app,process.platform,{visible,focused:win.isFocused(),interactive:true});
+ if(failure&&!win.isDestroyed())await dialog.showMessageBox(win,{type:'error',message:'工具箱更新未完成',detail:failure.detail+'\n日志：'+failure.log});
 });
 win.removeMenu();win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault());win.loadFile(path.join(__dirname,'app/index.html'));
 ipcMain.handle('choose-workbook',async()=>{const r=await dialog.showOpenDialog(win,{title:'选择 Excel 工作簿',buttonLabel:'打开',properties:['openFile'],filters:[{name:'Excel 工作簿',extensions:['xlsx']}]});return r.canceled?null:{name:path.basename(r.filePaths[0])};});
@@ -45,6 +60,6 @@ app.on('before-quit',e=>{
  if(business?.isBusy()){e.preventDefault();return;}
  if(!business||quitting)return;
  e.preventDefault();quitting=true;
- business.flushLogin().finally(()=>app.quit());
+ Promise.allSettled([updater?.dispose(),business.flushLogin()]).then(()=>app.quit());
 });
 app.on('window-all-closed',()=>app.quit());

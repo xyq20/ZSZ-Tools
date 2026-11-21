@@ -62,6 +62,10 @@ function Test-ToolkitPath($Process, [string[]]$Roots, [bool]$RegisteredOnly = $f
     }
     foreach ($root in $Roots) {
         if ($image -eq ($root + '钊叔工具箱.exe')) { return $true }
+        if ($image.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+            $relative = $image.Substring($root.Length)
+            if ($relative -match '^\.toolkit-versions\\\d+\.\d+\.\d+-[a-f0-9]{32}\\(钊叔工具箱\.exe|resources\\python\\(python\.exe|Lib\\site-packages\\playwright\\driver\\node\.exe))$') { return $true }
+        }
         if ($RegisteredOnly) {
             if ($image -in @(($root + 'resources\python\python.exe'),
                 ($root + 'resources\python\Lib\site-packages\playwright\driver\node.exe'))) { return $true }

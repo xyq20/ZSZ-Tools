@@ -1,13 +1,13 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.34",
+  "version": "0.4.35",
   "private": true,
-  "main": "main.cjs",
+  "main": "bootstrap.cjs",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:win": "electron-builder --win nsis --x64",
+    "dist:win": "electron-builder --win nsis zip --x64",
     "prepare:runtimes": "node scripts/prepare-runtimes.cjs",
     "test": "node --test test/*.test.cjs",
     "tools:sync": "node scripts/sync-tools.cjs",
@@ -32,6 +32,7 @@
       "zh_CN"
     ],
     "files": [
+      "bootstrap.cjs",
       "main.cjs",
       "preload.cjs",
       "app/**/*",
@@ -42,7 +43,8 @@
       "!business/taobao-reminders-python/**/*",
       "modules/**/*",
       "!business/sycm-python/**/*",
-      "!business/taobao-stock/**/*"
+      "!business/taobao-stock/**/*",
+      "!business/hot_update.py"
     ],
     "mac": {
       "extendInfo": {
@@ -69,7 +71,8 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "zip"
       ],
       "extraResources": [
         {
@@ -123,6 +126,10 @@
           "!**/__pycache__/**",
           "!**/*.pyc"
         ]
+      },
+      {
+        "from": "business/hot_update.py",
+        "to": "toolkit-update.py"
       }
     ]
   },
