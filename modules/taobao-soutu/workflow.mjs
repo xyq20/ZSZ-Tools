@@ -21,13 +21,13 @@ export async function lockPublishSource(source) {
   };
 }
 
-export async function resolveJobs(material, jobs, verifyMapped = false) {
+export async function resolveJobs(material, jobs, verifyMapped = false, onStage) {
   const resolved = [];
   const byKeyword = Map.groupBy(jobs, ({ group }) => group.keyword);
   for (const [keyword, related] of byKeyword) {
     const needsSearch = verifyMapped || related.some(job => !job.itemId);
     const products = needsSearch
-      ? await material.retry(() => material.productCandidates(keyword, { ocr: verifyMapped && material.config.ocr }))
+      ? await material.retry(() => material.productCandidates(keyword, { ocr: verifyMapped && material.config.ocr }), onStage)
       : [];
     let checkedOcr = verifyMapped;
     for (const { group, itemId } of related) {
@@ -40,6 +40,7 @@ export async function resolveJobs(material, jobs, verifyMapped = false) {
           resolvedId = selectProductId(group, products);
         } catch (error) {
           if (!group.color || checkedOcr || !material.config.ocr || !products.length) throw error;
+          onStage?.('正在通过 OCR 识别商品图片中的颜色');
           await material.addOcrText(products);
           checkedOcr = true;
           await material.checkAccess();
@@ -95,9 +96,9 @@ async function archiveIfComplete(config, state, archives, keyword, onProgress) {
   return keyword;
 }
 
-export async function runResolved({ material, config, runtime, resolved, archives = new Map(), state, publish = true, onProgress = console.log }) {
+export async function runResolved({ material, config, runtime, resolved, archives = new Map(), state, publish = true, onProgress = console.log, onBatch }) {
   const pending = Object.values(state).find(entry => entry.status === 'pending');
-  if (publish && pending) throw new Error(`待确认记录：${pending.group} / ${pending.itemId}。请先在千牛核对。`);
+  if (publish && pending) throw pendingError(`待确认记录：${pending.group} / ${pending.itemId}。请先在千牛核对。`);
   const unique = new Map();
   for (const { group, itemId } of resolved) {
     const key = productKey(group, itemId);
@@ -119,17 +120,24 @@ export async function runResolved({ material, config, runtime, resolved, archive
       if (name) archived.push(name);
     }
   };
+  onBatch?.('检查已发布记录和归档条件');
   await archive();
   for (const [key, { group, itemId }] of unique) {
+    const stage = (message, kind) => onBatch?.(`${group.key} · ${message}`, kind);
     const remainingDelay = lastSubmit + config.jobDelayMs - Date.now();
-    if (remainingDelay > 0) await delay(remainingDelay);
+    if (remainingDelay > 0) {
+      stage('等待下一组');
+      await delay(remainingDelay);
+    }
     const prepareStart = performance.now();
+    stage(`处理 ${group.images.length} 张图片`);
     onProgress(`正在准备 ${group.key} / ${itemId}，共 ${group.images.length} 张图`);
     const images = await prepareImages(group);
     const imageTime = performance.now() - prepareStart;
     const prepared = await material.prepare(itemId, images, {
       vacanciesBelow: previousVacancies.get(itemId),
       neededSlots: remaining.get(itemId),
+      onStage: stage,
     });
     const timing = prepared.timings;
     onProgress(`图片处理 ${seconds(imageTime)}，定位 ${seconds(timing.locate)}，上传 ${seconds(timing.upload)}，AI 文案 ${seconds(timing.copy)}。标题 ${prepared.copy.title}`);
@@ -142,26 +150,34 @@ export async function runResolved({ material, config, runtime, resolved, archive
     let hasPending = false;
     const submitStart = Date.now();
     try {
+      stage('正在向千牛提交图文');
       const materialId = await material.submit(prepared, async () => {
         state[key] = entry;
         await saveState(runtime, state);
         hasPending = true;
         lastSubmit = Date.now();
-      });
+      }, () => stage('正在回查千牛发布结果'));
       state[key] = { ...entry, status: 'published', time: new Date().toISOString(),
         ...(materialId && { id: materialId }) };
       onProgress(`提交与回查 ${seconds(Date.now() - submitStart)}${materialId ? '，素材 ID ' + materialId : ''}`);
       await saveState(runtime, state);
     } catch (error) {
       if (!hasPending) throw error;
-      throw new Error(`${group.key} / ${itemId} 的提交结果待核对。请检查素材列表后运行 resolve。`, { cause: error });
+      throw pendingError(`${group.key} / ${itemId} 的提交结果待核对。请检查素材列表后运行 resolve。`, error);
     }
     previousVacancies.set(itemId, prepared.vacancies);
     remaining.set(itemId, remaining.get(itemId) - 1);
     completed++;
     onProgress(`千牛已确认发布 ${group.key} / ${itemId}`);
+    stage('千牛已确认发布');
     await archive();
   }
   onProgress(`本批千牛已确认 ${completed} 组`);
   return { completed, archived };
+}
+
+function pendingError(message, cause) {
+  const error = new Error(message, { cause });
+  error.code = 'SOUTU_PENDING';
+  return error;
 }

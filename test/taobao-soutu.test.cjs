@@ -18,6 +18,8 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
   let locks = 0;
   let launches = 0;
   let writes = 0;
+  let waitForConfirmation = false;
+  const snapshots = [];
   const context = new EventEmitter();
   const page = { isClosed: () => false };
   context.pages = () => [page];
@@ -35,7 +37,11 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
     async runResolved(options) {
       assert.equal(locks, 2);
       assert.equal(options.resolved[0].itemId, itemId);
+      options.onBatch?.('正在回查发布结果', 'active');
       writes++;
+      if (waitForConfirmation) throw Object.assign(new Error('提交结果待核对'), { code: 'SOUTU_PENDING' });
+      options.state['state-record'] = { status: 'published' };
+      options.onBatch?.('千牛已确认发布', 'active');
       return { completed: 1, archived: [] };
     },
   };
@@ -46,7 +52,7 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
       showOpenDialog: async () => ({ filePaths: [source] }),
       showMessageBox: async () => ({ response: confirm }),
     },
-    progress: () => {},
+    progress: (_message, snapshot) => { if (snapshot) snapshots.push(snapshot); },
     coreLoader: async () => core,
     findBrowser: () => 'fixture',
   });
@@ -55,19 +61,31 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
   const plan = await tool.plan(selection);
   assert.equal(plan.ready, true);
   assert.equal(plan.rows[0].itemId, itemId);
+  assert.deepEqual(snapshots.map(({ operation, count, total, stage }) => [operation, count, total, stage]), [
+    ['check', 0, 1, 'active'], ['check', 0, 1, 'active'], ['check', 1, 1, 'active'], ['check', 1, 1, 'done'],
+  ]);
+  assert.equal(snapshots.find(snapshot => snapshot.stage === 'active' && snapshot.count === 1)?.rows?.[0]?.status, '核对通过');
+  const eventsBeforeCancel = snapshots.length;
   assert.equal(await tool.publish(), null);
+  assert.equal(snapshots.length, eventsBeforeCancel);
   assert.equal(writes, 0);
 
   confirm = 1;
   current = { ...group, fingerprint: 'changed' };
   await assert.rejects(tool.publish(), /已移动或发生变化/);
+  assert.deepEqual([snapshots.at(-1)?.stage, snapshots.at(-1)?.count], ['error', 0]);
   assert.equal(locks, 0);
   assert.equal(writes, 0);
   current = group;
   await tool.plan(selection);
   assert.equal((await tool.publish()).completed, 1);
+  assert.deepEqual([snapshots.at(-1)?.stage, snapshots.at(-1)?.count], ['done', 1]);
   assert.equal(writes, 1);
   assert.equal(launches, 1);
   assert.equal(locks, 0);
+  waitForConfirmation = true;
+  await tool.plan(selection);
+  await assert.rejects(tool.publish(), /提交结果待核对/);
+  assert.deepEqual([snapshots.at(-1)?.stage, snapshots.at(-1)?.count], ['pending', 0]);
   await tool.cleanup();
 });

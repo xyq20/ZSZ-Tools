@@ -97,7 +97,7 @@ export class MaterialPage {
     throw new TemporaryFailure(label);
   }
 
-  async retry(operation) {
+  async retry(operation, onStage) {
     const { maxAttempts, retryDelayMs } = this.config;
     for (let attempt = 1; ; attempt++) {
       try {
@@ -110,9 +110,12 @@ export class MaterialPage {
         }
         this.searchSurface = undefined;
         const backoff = retryDelayMs * 2 ** (attempt - 1);
-        console.warn(`第 ${attempt} 次准备失败，${backoff / 1000} 秒后重试。 ${error.message.split('\n')[0]}`);
+        const reason = error.message.split('\n')[0];
+        console.warn(`第 ${attempt} 次准备失败，${backoff / 1000} 秒后重试。 ${reason}`);
+        onStage?.(`${reason} · ${backoff / 1000} 秒后开始第 ${attempt + 1} 次尝试（共 ${maxAttempts} 次）`, 'retry');
         await delay(backoff);
         await this.checkAccess();
+        onStage?.(`正在进行第 ${attempt + 1} 次尝试（共 ${maxAttempts} 次）`, 'active');
       }
     }
   }
@@ -537,7 +540,8 @@ export class MaterialPage {
     return this.waitFor(() => verify(frame), '列表未确认新素材的坑位、图片张数和封面，请先核对。');
   }
 
-  async prepare(itemId, images, { vacanciesBelow, neededSlots = 1 } = {}) {
+  async prepare(itemId, images, { vacanciesBelow, neededSlots = 1, onStage } = {}) {
+    onStage?.('定位商品和空素材位');
     const locateAt = performance.now();
     const { form, vacancies, listing } = await this.retry(async () => {
       const { frame, row } = await this.findProductRow(itemId);
@@ -551,10 +555,12 @@ export class MaterialPage {
         ? { frame, itemId, before: new Set((await this.listedMaterials(row)).map(entry => entry.id)) }
         : null;
       return { form: await this.openDrawer(frame, slots), vacancies, listing };
-    });
+    }, onStage);
     const uploadAt = performance.now();
+    onStage?.('上传图片');
     await this.upload(form.drawer, images);
     const copyAt = performance.now();
+    onStage?.('等待千牛 AI 生成文案');
     const copy = await this.generateCopy(form);
     const timings = { locate: uploadAt - locateAt, upload: copyAt - uploadAt, copy: performance.now() - copyAt };
     if (listing) {
@@ -570,7 +576,7 @@ export class MaterialPage {
     return { form, copy, vacancies, imageCount: images.length, listing, timings };
   }
 
-  async submit(prepared, beforeClick) {
+  async submit(prepared, beforeClick, onSubmitted) {
     const { form, copy } = prepared;
     const { drawer } = form;
     const confirm = await one(drawer.getByRole('button', { name: '确认', exact: true })) ??
@@ -595,6 +601,7 @@ export class MaterialPage {
     await beforeClick();
     await this.checkAccess();
     await confirm.click();
+    onSubmitted?.();
     if (prepared.listing) {
       await this.waitFor(async () => !await drawer.isVisible().catch(() => false), '发布面板仍开启，请核对提交结果。');
       return this.confirmFromList(prepared);

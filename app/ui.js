@@ -94,7 +94,16 @@ function refreshActions(){for(const b of document.querySelectorAll('[data-job]')
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
 async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
-window.desktop?.onProgress(p=>{statusFor(p.tool).textContent=p.message;if(['sycm','taobao-soutu'].includes(p.tool)){const log=document.getElementById(p.tool+'-log');if(p.tool==='taobao-soutu')document.getElementById('taobao-soutu-run-log').hidden=false;log.textContent=(log.textContent+p.message+'\n').slice(-30000);log.scrollTop=log.scrollHeight;}});
+window.desktop?.onProgress(({ tool, message, batch }) => {
+  if (tool === 'taobao-soutu' && batch) renderSoutuBatch(batch, message);
+  else if (tool !== 'taobao-soutu' || soutuField('batch').hidden) statusFor(tool).textContent = message;
+  if (tool === 'sycm' || tool === 'taobao-soutu') {
+    const log = document.getElementById(tool + '-log');
+    if (tool === 'taobao-soutu') soutuField('run-log').hidden = false;
+    log.textContent = (log.textContent + message + '\n').slice(-30000);
+    log.scrollTop = log.scrollHeight;
+  }
+});
 for(const button of document.querySelectorAll('[data-login]'))button.addEventListener('click',async()=>{const tool=button.dataset.login;try{await call('login',tool);statusFor(tool).textContent='请在登录窗口完成登录，返回后点击查询。';}catch(e){statusFor(tool).textContent=e.message;}});
 document.getElementById('choose').addEventListener('click',()=>run('price',async()=>{const b=await call('choose');if(!b)return;hasBook=true;hasPrices=false;hasFillablePrices=false;document.getElementById('book').textContent=`${b.name} · ${b.sheet} · ${b.rows} 行`;document.getElementById('price-results').replaceChildren();statusFor('price').textContent=`文件已读取：待补价格 ${b.pending} 行，已有内容或公式 ${b.skipped} 行将跳过。`;}));
 document.getElementById('price-query').addEventListener('click',()=>run('price',async()=>{hasPrices=false;hasFillablePrices=false;document.getElementById('price-results').replaceChildren();statusFor('price').textContent='开始查询空白价格…';const rows=await call('price-query');hasPrices=true;table('price-results',['行','货号','商品名称','原价格','淘宝价格','状态','说明'],rows.map(r=>[r.row,r.code,r.name,r.original,r.price,r.status,r.reason]));const n=rows.filter(r=>r.status==='待填入').length,skipped=rows.filter(r=>['已有价格','公式保留'].includes(r.status)).length;hasFillablePrices=n>0;statusFor('price').textContent=`核对完成：跳过 ${skipped} 行，${n} 行可补价格，${rows.length-skipped-n} 行待核对。${n?'请核对结果后确认填入。':''}`;}));
@@ -208,6 +217,58 @@ function soutuField(name) {
   return document.getElementById('taobao-soutu-' + name);
 }
 
+let soutuBatchTimer;
+let soutuBatchStarted;
+
+function tickSoutuBatch() {
+  const seconds = Math.floor((performance.now() - soutuBatchStarted) / 1000);
+  const elapsed = [Math.floor(seconds / 60), seconds % 60].map(value => String(value).padStart(2, '0')).join(':');
+  soutuField('batch-elapsed').textContent = '已用时 ' + elapsed;
+}
+
+function stopSoutuBatchTimer() {
+  clearInterval(soutuBatchTimer);
+  soutuBatchTimer = undefined;
+}
+
+function renderSoutuBatch({ operation, count, total, stage, rows }, message) {
+  const panel = soutuField('batch');
+  const checking = operation === 'check';
+  const active = stage === 'active' || stage === 'retry';
+  if (active && (!soutuBatchTimer || panel.dataset.operation !== operation)) {
+    stopSoutuBatchTimer();
+    soutuBatchStarted = performance.now();
+    soutuBatchTimer = setInterval(tickSoutuBatch, 1000);
+    statusFor('taobao-soutu').textContent = '';
+  }
+  panel.dataset.operation = operation;
+  panel.dataset.stage = stage;
+  soutuField('batch-title').textContent = checking ? '核对所选商品' : '发布搜推图文';
+  soutuField('batch-stage').textContent = {
+    active: checking ? '核对中' : '发布中',
+    retry: '等待重试', partial: '部分待核对', pending: '待确认', error: '已停止', done: '已完成',
+  }[stage];
+  const tally = checking ? `已核对 ${count} / ${total} 组` : `已确认 ${count} / ${total} 篇`;
+  soutuField('batch-count').textContent = tally;
+  const progress = soutuField('batch-bar');
+  progress.max = total;
+  progress.value = count;
+  progress.setAttribute('aria-valuetext', tally);
+  soutuField('batch-detail').textContent = message;
+  if (rows) updateSoutuRows(rows);
+  tickSoutuBatch();
+  if (!active) stopSoutuBatchTimer();
+  panel.hidden = false;
+}
+
+function updateSoutuRows(results) {
+  const byKey = new Map(results.map(row => [row.key, row]));
+  for (const row of soutuField('rows').rows) {
+    const info = byKey.get(row.dataset.key);
+    if (info) row.lastElementChild.textContent = [info.status, info.itemId, info.title, info.error].filter(Boolean).join(' · ');
+  }
+}
+
 function refreshSoutuActions() {
   const choices = [...soutuField('rows').querySelectorAll('input[type="checkbox"]')];
   const valid = choices.filter(input => input.closest('tr').dataset.valid === 'true');
@@ -283,6 +344,7 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
       const result = await call('taobao-soutu-' + action);
       if (result) {
         renderSoutuFolder(result);
+        soutuField('batch').hidden = true;
         status.textContent = result.rows.length ? '请选择本批分组，再核对商品。' : '当前目录没有待办素材。';
       }
       return;
@@ -294,16 +356,15 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
         key: row.dataset.key, itemId: row.querySelector('input[type="text"]').value.trim(),
       }));
       status.textContent = '正在核对所选商品…';
-      const result = await call('taobao-soutu-plan', selected);
-      const byKey = new Map(result.rows.map(row => [row.key, row]));
-      for (const row of rows) {
-        const info = byKey.get(row.dataset.key);
-        if (info) row.lastElementChild.textContent = [info.status, info.itemId, info.title, info.error].filter(Boolean).join(' · ');
+      let result;
+      try {
+        result = await call('taobao-soutu-plan', selected);
+      } catch (error) {
+        if (soutuField('batch-detail').textContent === error.message) return;
+        throw error;
       }
+      updateSoutuRows(result.rows);
       soutuReady = result.ready;
-      status.textContent = result.pending
-        ? `「${result.pending}」有待确认记录，请先核对。`
-        : `匹配 ${result.matched} 组，另有 ${result.rows.length - result.matched} 组待核对。请检查商品 ID 和结果后再发布。`;
       return;
     }
     if (action === 'publish') {
@@ -318,6 +379,7 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
       } catch (error) {
         soutuReady = false;
         try { renderSoutuHistory(await call('taobao-soutu-history')); } catch {}
+        if (soutuField('batch-detail').textContent === error.message) return;
         throw error;
       }
       return;

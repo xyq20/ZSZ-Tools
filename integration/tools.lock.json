@@ -260,12 +260,12 @@
     },
     "taobao-soutu": {
       "source": "../../../Documents/ChatGPT/搜推素材（小林）",
-      "commit": "05295e72fcd8352c95a66e778585293ca8f5fa67",
+      "commit": "5358e63c8d9753ded0ddbfa052ce8f80b4e5572a",
       "dirty": false,
       "files": {
         "src/browser.mjs": {
           "target": "modules/taobao-soutu/browser.mjs",
-          "sha256": "36f9a22786b9d34aa1dd40665c791bcde5532a782309d2e1d5f7d2bc940da340"
+          "sha256": "6cb3985affa7ac2fdce543f90c9face4c808492d19180ac248c03decf243460b"
         },
         "src/materials.mjs": {
           "target": "modules/taobao-soutu/materials.mjs",
@@ -277,7 +277,7 @@
         },
         "src/workflow.mjs": {
           "target": "modules/taobao-soutu/workflow.mjs",
-          "sha256": "60d90918f453a39ad5d5f6d25872023185b1c3b0953e094fa48a527fb0d53764"
+          "sha256": "08e33a1dc013a2242dfda320296ed337bcb8872b749fedb653b0613bbe500aae"
         },
         "src/ocr.mjs": {
           "target": "modules/taobao-soutu/ocr.mjs",

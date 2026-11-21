@@ -97,11 +97,31 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
     return scan();
   }
 
+  async function withBatch(operation, total, work) {
+    let count = 0;
+    const report = (message, stage = 'active', confirmed = count, rows) => {
+      count = confirmed;
+      progress(message, { operation, count, total, stage, rows });
+    };
+    try {
+      return await work(report);
+    } catch (error) {
+      report(error.message, error.code === 'SOUTU_PENDING' ? 'pending' : 'error');
+      throw error;
+    }
+  }
+
   async function plan(selection) {
     ready = null;
     if (!source || !Array.isArray(selection) || !selection.length || selection.length > groups.length) {
       throw Error('请勾选要处理的素材组。');
     }
+    return withBatch('check', selection.length, report => checkSelection(selection, report));
+  }
+
+  async function checkSelection(selection, report) {
+    report('正在连接千牛并检查登录状态', 'active', 0,
+      selection.map(row => ({ key: row?.key, status: '等待核对' })));
     const core = await coreLoader();
     const byKey = new Map(groups.map(group => [group.key, group]));
     const keys = new Set();
@@ -114,39 +134,59 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
     const page = await browser();
     await page.checkAccess();
     const state = await core.readState(runtime);
-    const rows = [];
     const resolved = [];
     const missing = [];
+    const matchedRow = ({ group, itemId, title }) => {
+      const previous = state[core.productKey(group, itemId)];
+      return { key: group.key, itemId, title, status: previous?.status === 'published' ? '已发布，跳过提交' : '核对通过' };
+    };
+    const missingRow = (group, error) => ({ key: group.key, error: error.message, status: '待核对' });
     for (const [keyword, related] of Map.groupBy(jobs, job => job.group.keyword)) {
-      progress(`正在核对 ${keyword}…`);
       const automatic = related.filter(job => !job.itemId);
       const manual = related.filter(job => job.itemId);
       if (automatic.length) {
+        const label = automatic.length === 1 ? automatic[0].group.key : `${keyword}（${automatic.length} 组）`;
+        report(`${label} · 正在等待千牛返回搜索结果`, 'active', resolved.length,
+          automatic.map(({ group }) => ({ key: group.key, status: '核对中' })));
+        let updates;
         try {
-          resolved.push(...await core.resolveJobs(page, automatic));
+          const matches = await core.resolveJobs(page, automatic, false,
+            (message, stage) => report(`${label} · ${message}`, stage));
+          resolved.push(...matches);
+          updates = matches.map(matchedRow);
         } catch (error) {
           await page.checkAccess();
-          for (const { group } of automatic) missing.push({ key: group.key, error: error.message });
+          updates = automatic.map(({ group }) => missingRow(group, error));
+          missing.push(...updates);
         }
+        report(`${label} · 商品搜索结束`, 'active', resolved.length, updates);
       }
       for (const job of manual) {
+        report(`${job.group.key} · 正在按商品 ID 核对`, 'active', resolved.length,
+          [{ key: job.group.key, status: '核对中' }]);
+        let update;
         try {
-          const { row } = await page.retry(() => page.findProductRow(job.itemId));
+          const { row } = await page.retry(() => page.findProductRow(job.itemId),
+            (message, stage) => report(`${job.group.key} · ${message}`, stage));
           const title = (await row.innerText()).split(/商品\s*ID/i)[0].replace(/\s+/g, ' ').trim();
-          resolved.push({ ...job, title });
+          const match = { ...job, title };
+          resolved.push(match);
+          update = matchedRow(match);
         } catch (error) {
           await page.checkAccess();
-          missing.push({ key: job.group.key, error: error.message });
+          update = missingRow(job.group, error);
+          missing.push(update);
         }
+        report(`${job.group.key} · 商品 ID 核对结束`, 'active', resolved.length, [update]);
       }
     }
-    for (const { group, itemId, title } of resolved) {
-      const previous = state[core.productKey(group, itemId)];
-      rows.push({ key: group.key, itemId, title, status: previous?.status === 'published' ? '已发布，跳过提交' : '核对通过' });
-    }
-    rows.push(...missing.map(row => ({ ...row, status: '待核对' })));
+    const rows = [...resolved.map(matchedRow), ...missing];
     const pending = Object.values(state).find(entry => entry.status === 'pending');
     if (resolved.length && !pending) ready = { source, resolved, skipped: missing.length };
+    report(pending
+      ? `「${pending.group}」有待确认的发布记录，请先核对`
+      : missing.length ? `${missing.length} 组待核对，请检查商品 ID` : '请检查匹配结果，再确认发布',
+    pending ? 'pending' : missing.length ? 'partial' : 'done', resolved.length);
     return { rows, ready: Boolean(ready), pending: pending?.group || '', matched: resolved.length };
   }
 
@@ -165,6 +205,16 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
     if (confirmed.response !== 1) return null;
     ready = null;
     const core = await coreLoader();
+    const keys = new Set(selected.resolved.map(({ group, itemId }) => core.productKey(group, itemId)));
+    return withBatch('publish', keys.size, async report => {
+      const result = await publishSelection(core, selected, styles, keys, report);
+      report(`本批素材均已确认，${result.archived.length} 款移入「已上」`, 'done');
+      return result;
+    });
+  }
+
+  async function publishSelection(core, selected, styles, keys, report) {
+    report('正在检查本批素材和共享目录');
     const unlock = await core.lockRuntime(runtime);
     try {
       const release = await core.lockPublishSource(source);
@@ -177,12 +227,17 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, coreLoader =
         }
         const cfg = config();
         const state = await core.readState(runtime);
+        const confirmedCount = () => [...keys].filter(key => state[key]?.status === 'published').length;
+        report('正在核对发布记录和归档条件', 'active', confirmedCount());
         const archives = await core.archivesFor(cfg, current, selected.resolved);
         const result = await core.runResolved({
           material: await browser(), config: cfg, runtime, resolved: selected.resolved, archives, state,
           onProgress: progress,
+          onBatch: (message, stage) => report(message, stage, confirmedCount()),
         });
-        return { ...result, folder: await scan() };
+        report('正在刷新待办素材', 'active', confirmedCount());
+        const folder = await scan();
+        return { ...result, folder };
       } finally {
         await release();
       }

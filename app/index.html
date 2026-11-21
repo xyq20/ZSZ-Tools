@@ -144,6 +144,20 @@
     <button id="taobao-soutu-publish" data-job disabled>发布已核对分组</button>
   </div>
   <p id="taobao-soutu-folder">尚未选择目录</p>
+  <div id="taobao-soutu-batch" hidden>
+    <div class="soutu-batch-line">
+      <div class="soutu-batch-line">
+        <strong id="taobao-soutu-batch-title">核对所选商品</strong>
+        <span id="taobao-soutu-batch-stage"></span>
+      </div>
+      <strong id="taobao-soutu-batch-count"></strong>
+    </div>
+    <progress id="taobao-soutu-batch-bar" max="1" value="0" aria-labelledby="taobao-soutu-batch-title"></progress>
+    <div class="soutu-batch-line">
+      <span id="taobao-soutu-batch-detail" role="status"></span>
+      <span id="taobao-soutu-batch-elapsed"></span>
+    </div>
+  </div>
   <p id="taobao-soutu-progress" role="status" aria-live="polite">同名商品可填写核对过的商品 ID。整款确认完成后将移入「已上」。</p>
   <div id="taobao-soutu-selection" class="result-table" hidden>
     <table>
