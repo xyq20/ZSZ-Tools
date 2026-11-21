@@ -1,3 +1,11 @@
+; On macOS electron-builder reconstructs the NSIS uninstaller using the setup
+; PE header. Matching icons keep that header identical to the one NSIS checks.
+!define /ifndef MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
+!define /ifndef MUI_UNICON "${MUI_ICON}"
+!ifndef BUILD_UNINSTALLER
+  !system 'node "${BUILD_RESOURCES_DIR}/verify-nsis-uninstaller.cjs" "${UNINSTALLER_OUT_FILE}"' = 0
+!endif
+
 !macro runToolkitCleanup ARGUMENTS
   InitPluginsDir
   File /oname=$PLUGINSDIR\stop-toolkit-processes.ps1 "${BUILD_RESOURCES_DIR}\stop-toolkit-processes.ps1"
@@ -36,6 +44,26 @@
   !insertmacro runToolkitCleanup '-InstallDir "$INSTDIR\." -PreviousUserDir "$R3\." -PreviousMachineDir "$R4\."'
 !macroend
 
+!ifndef BUILD_UNINSTALLER
+!macro repairRegisteredUninstaller HIVE
+  ReadRegStr $R3 ${HIVE} "${INSTALL_REGISTRY_KEY}" InstallLocation
+  ${If} $R3 != ""
+  ${AndIf} ${FileExists} "$R3\${UNINSTALL_FILENAME}"
+    InitPluginsDir
+    File /oname=$PLUGINSDIR\toolkit-uninstaller.exe "${UNINSTALLER_OUT_FILE}"
+    File /oname=$PLUGINSDIR\repair-legacy-uninstaller.ps1 "${BUILD_RESOURCES_DIR}\repair-legacy-uninstaller.ps1"
+    nsExec::ExecToStack /TIMEOUT=30000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\repair-legacy-uninstaller.ps1" -InstallDir "$R3\." -Replacement "$PLUGINSDIR\toolkit-uninstaller.exe"'
+    Pop $R0
+    Pop $R1
+    DetailPrint "$R1"
+    ${If} $R0 != 0
+      SetErrorLevel 13
+      Quit
+    ${EndIf}
+  ${EndIf}
+!macroend
+!endif
+
 !macro customCheckAppRunning
   DetailPrint "正在等待旧版工具箱及其子进程退出…"
   toolkit_process_retry:
@@ -69,6 +97,10 @@
     Quit
   ${EndIf}
   !ifndef BUILD_UNINSTALLER
+    !insertmacro repairRegisteredUninstaller SHELL_CONTEXT
+    ${If} $installMode == "all"
+      !insertmacro repairRegisteredUninstaller HKCU
+    ${EndIf}
     ; An update from an internal installation keeps its own notification settings.
     ; The public installer carries no machine's webhook.
     IfFileExists "$INSTDIR\resources\taobao-reminders-defaults.json" 0 +2

@@ -12,6 +12,7 @@ const {setTimeout: delay} = require('node:timers/promises');
 const asar = require('@electron/asar');
 const {chromium} = require('playwright-core');
 const {verifyFile} = require('../business/windows-update.cjs');
+const {validUninstaller} = require('../build/verify-nsis-uninstaller.cjs');
 
 const exec = promisify(execFile);
 const updates = path.join(process.env.APPDATA || '', 'team-toolkit', 'updates');
@@ -115,6 +116,9 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
   const info = asset => ({size: asset.size, sha256: asset.digest.replace(/^sha256:/, '')});
   await Promise.all([verifyFile(baseFile, info(baseline)), verifyFile(targetFile, info(candidate))]);
   const {installDir, executable, archive, options} = await installBaseline(baseFile, fromVersion);
+  const uninstaller = path.join(installDir,'Uninstall 钊叔工具箱.exe');
+  const neededRepair = !validUninstaller(await fs.readFile(uninstaller));
+  console.log('Starting uninstaller CRC repair required:',neededRepair);
   const defaultsFile = path.join(installDir, 'resources', 'taobao-reminders-defaults.json');
   const directory = path.join(updates, version + '-win32-x64');
   async function holdExecutable() {
@@ -176,6 +180,8 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
     await windowReady(old);
     locked = await holdExecutable();
     await fs.mkdir(directory, {recursive: true});
+    const localSetting = path.join(path.dirname(updates),'upgrade-smoke-setting');
+    await fs.writeFile(localSetting,'preserve');
     const file = path.join(directory, 'installer.exe');
     const runtime = path.join(directory, 'update-node.exe');
     const helper = path.join(directory, 'windows-update.cjs');
@@ -193,10 +199,14 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
     assert.equal(stdout.trim(), 'True');
     assert.equal(await applied, 0, 'baseline helper failed to update');
     assert.equal(versionOf(archive), version);
+    assert(validUninstaller(await fs.readFile(uninstaller)),'installed uninstaller CRC is invalid');
+    assert.equal(await fs.readFile(localSetting,'utf8'),'preserve');
     assert.equal(await fs.readFile(defaultsFile, 'utf8'), oldDefaults);
     assert.equal(await fs.readFile(path.join(directory, 'healthy'), 'utf8'), 'ok');
     assert.match(await fs.readFile(path.join(directory, 'install.log'), 'utf8'), /新版工具箱已启动/);
-    assert((await fs.readFile(cleanupLog, 'utf8')).includes('PID=' + locked.pid), 'residual process was not exercised');
+    const cleanupTrace = await fs.readFile(cleanupLog, 'utf8');
+    assert(cleanupTrace.includes('PID=' + locked.pid), 'residual process was not exercised');
+    if(neededRepair)assert(cleanupTrace.includes('已修复旧版卸载器校验错误'),'legacy uninstaller was not repaired');
     assert.notEqual(locked.exitCode, null);
     assert.equal(marker.exitCode, null);
     await assert.rejects(fs.access(path.join(directory, 'helper-' + token + '.ready')), {code: 'ENOENT'});
