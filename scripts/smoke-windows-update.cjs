@@ -214,6 +214,18 @@ async function verifyUpgrade(metadata, baseFile, targetFile) {
     console.log('Confirmed real installer, relaunch and health acknowledgement:', fromVersion, '->', version);
     if (cleanupFailure) throw cleanupFailure;
   } catch (error) {
+    console.error('Installed version after failure',versionOf(archive));
+    console.error('Pending',await fs.readFile(path.join(updates,'pending.json'),'utf8').catch(()=>'absent'));
+    console.error('Application windows',(await ps("Get-Process | Where-Object ProcessName -eq '钊叔工具箱' | Select-Object Id,MainWindowTitle,Path | ConvertTo-Json -Compress")).stdout);
+    console.error('Window diagnostics',(await ps(`
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
+      foreach ($p in @(Get-Process -Name '钊叔工具箱' -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0)) {
+        $window = [Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+        $window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition) |
+          Select-Object -First 30 | ForEach-Object { $_.Current.Name }
+      }
+    `).catch(()=>({stdout:''}))).stdout.slice(0,2800));
     for (const log of [cleanupLog, path.join(directory, 'install.log'), path.join(directory, 'healthy.failed')]) {
       const detail = await fs.readFile(log, 'utf8').catch(() => '');
       if (detail) console.error(path.basename(log), detail.slice(-2400));

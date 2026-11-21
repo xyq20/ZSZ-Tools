@@ -120,18 +120,24 @@ async function verify(){
  try{
   const old=spawn(executable,['--remote-debugging-port='+rendererPort,'--inspect=127.0.0.1:'+mainPort],{stdio:['ignore',output.fd,output.fd]});
   old.unref();
+  console.log('Starting packaged baseline',before,'PID',old.pid);
   const ui=await pageAt(rendererPort);browser=ui.browser;const page=ui.page;
+  console.log('Baseline window available');
+  page.on('pageerror',error=>console.error('Renderer:',error.message));
   assert((await page.locator('#app-version').innerText()).includes('v'+before));
   await stageOffer(mainPort,offer,assetUrl(payloadAsset.name),payload);
   await page.locator('#check-update').click();
   await page.locator('#download-update').click();
+  console.log('Update download started');
   await page.locator('#update-status').filter({hasText:'后台准备'}).waitFor({timeout:180000});
+  console.log('Application is preparing the payload');
   assert(await page.locator('#install-update').isHidden());
   await page.locator('#close-update').click();
   await page.locator('aside [data-view="report"]').click();assert(await page.locator('#report').isVisible());
   await page.locator('#check-update').click();
   await page.locator('#install-update').waitFor({timeout:240000});
   await fs.writeFile(path.join(data,'qa-preserve-setting'),'preserve');
+  console.log('Update prepared');
   const clicked=Date.now();
   await page.locator('#install-update').click({noWaitAfter:true}).catch(error=>{if(!page.isClosed())throw error;});
   const proof=await until('new window receipt',async()=>{
@@ -155,10 +161,12 @@ async function verify(){
   await stable.page.locator('aside [data-view="price"]').click();assert(await stable.page.locator('#price').isVisible());
   console.log('Original desktop entry reopened the updated interactive application.');
  }catch(error){
+  if(browser){const page=browser.contexts()[0]?.pages()[0];if(page)console.error('Update UI:',await page.locator('#update-status').textContent({timeout:1600}).catch(()=>''));}
+  console.error('Update files:',await fs.readdir(directory).catch(()=>[]));
   for(const file of [path.join(workspace,'app.log'),...['install.log','install-helper.log','healthy.failed'].map(name=>path.join(directory,name))]){
    console.error(path.basename(file),(await fs.readFile(file,'utf8').catch(()=>'' )).slice(-2200));
   }
   throw error;
- }finally{await output.close();if(browser)await browser.close().catch(()=>{});}
+ }finally{await output.close();if(browser)await Promise.race([browser.close().catch(()=>{}),delay(3000)]);}
 }
 verify().catch(error=>{console.error(error);process.exitCode=1;});
