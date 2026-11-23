@@ -90,14 +90,40 @@ async function verifyPublishedUpdate(release, baseFile) {
     assert.equal(await page.locator('#update-percent').innerText(),'100%');
     console.log('Public offer found and downloaded through the installed UI:',version);
     await page.locator('#install-update').click({noWaitAfter:true});
+    let receipt;
     await waitFor('public update to relaunch', async () => {
       const failure = await fs.readFile(path.join(directory,'healthy.failed'),'utf8').catch(()=>null);
-      if(failure)throw Error(failure);
-      return fs.access(path.join(directory,'healthy')).then(()=>true,()=>false);
+      if (failure) throw Error(failure);
+      receipt = await fs.readFile(path.join(directory,'healthy'),'utf8').catch(()=>null);
+      return Boolean(receipt);
     },360000);
-    assert.equal(versionOf(archive),version);
-    await waitFor('helper to confirm the public upgrade',async () =>
-      (await fs.readFile(path.join(directory,'install.log'),'utf8').catch(()=>'')).includes('新版工具箱已启动'));
+    if (receipt.trim() === 'ok') {
+      assert.equal(versionOf(archive), version);
+      await waitFor('installer to confirm the public upgrade',async () =>
+        (await fs.readFile(path.join(directory,'install.log'),'utf8').catch(()=>'' )).includes('新版工具箱已启动'));
+    } else {
+      const window = JSON.parse(receipt);
+      assert.equal(window.version, version);
+      assert(window.interactive && window.visible && window.pid !== old.pid);
+      // Prepared updates keep the installer entry and run the active version from a slot.
+      const candidateArchive = path.join(path.dirname(window.executable), 'resources', 'app.asar');
+      assert.equal(versionOf(candidateArchive), version);
+      await ps('(Get-Process -Id ' + Number(window.pid) + ').CloseMainWindow()');
+      await waitFor('updated window to exit', async () => {
+        const {stdout} = await ps('if (Get-Process -Id ' + Number(window.pid) + ' -ErrorAction SilentlyContinue) { "running" }');
+        return !stdout.trim();
+      });
+      const restarted = spawn(executable, ['--remote-debugging-address=127.0.0.1','--remote-debugging-port=' + port],
+        {cwd:installDir, stdio:'ignore'});
+      restarted.unref();
+      await waitFor('original entry to reopen correctly', () => fetch(endpoint+'/json/version').then(r=>r.ok,()=>false));
+      browser = await chromium.connectOverCDP(endpoint);
+      const context = browser.contexts()[0];
+      page = context.pages()[0] || await context.waitForEvent('page');
+      const appVersion = page.locator('#app-version');
+      await appVersion.filter({hasText:'v' + version}).waitFor({timeout:20000});
+      assert.match(await appVersion.innerText(), new RegExp('v' + version.replaceAll('.', '\\.') + '\\b'));
+    }
     console.log('Public Windows UI upgrade verified:',from,'->',version);
   } catch(error) {
     if(page && !page.isClosed())console.error(await page.locator('#update-status').innerText().catch(()=>''));
