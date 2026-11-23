@@ -22,7 +22,7 @@ checkpoint(r,state,book,products)
  const project=${JSON.stringify(project)},dir=${JSON.stringify(dir)},file=${JSON.stringify(file)};
  app.setPath('userData',path.join(dir,'profile'));let win;
  app.whenReady().then(async()=>{try{
-  const original=fs.readFileSync(file);dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});ipcMain.handle('app-version',()=> 'test');
+  const original=fs.readFileSync(file);dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});ipcMain.handle('app-version',()=> 'test');ipcMain.handle('main-window-ready',()=>{});ipcMain.handle('update-state',()=>({status:'idle'}));
   win=new BrowserWindow({show:false,width:1280,height:960,webPreferences:{preload:path.join(project,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   const business=require(path.join(project,'business/desktop.cjs')).setupBusiness(win,app);await win.loadFile(path.join(project,'app/index.html'));
   const evaluate=s=>win.webContents.executeJavaScript(s,true);

@@ -303,6 +303,21 @@
           "sha256": "285f0fa9684ef09484c88ce663c083d07b24229854779c6e1df46633efa61351"
         }
       }
+    },
+    "erp-stock-rules": {
+      "source": "../../../Documents/ChatGPT/上传库存规则批量点击（谭）",
+      "commit": "0842b4782dbdc6d994849f5d1b94d7225fedbf96",
+      "dirty": false,
+      "files": {
+        "upload_rules.py": {
+          "target": "business/erp-stock-rules-python/upload_rules.py",
+          "sha256": "38b562ff91321f8db5c7adc968d4dcab57c7b1dcd89d89bda5d9510b11d63e51"
+        },
+        "toolbox_bridge.py": {
+          "target": "business/erp-stock-rules-python/bridge.py",
+          "sha256": "a31355fe47b2b0b2a7c0183083e94c7ea1666547eccdaeafc5557daad5d7aece"
+        }
+      }
     }
   }
 }

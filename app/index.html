@@ -7,16 +7,16 @@
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><strong>丹姐</strong></div><button data-view="report" class="nav-tool"><span>销售月报</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><strong>三公</strong></div><button data-view="price" class="nav-tool"><span>批量导入价格</span></button><button data-view="taobao-stock" class="nav-tool"><span>自动库存填写</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-monthly" aria-hidden="true">双</span><strong>双姐</strong></div><button data-view="monthly" class="nav-tool"><span>分级总表</span></button><button data-view="return-rate" class="nav-tool"><span>退货率报表</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><strong>谭</strong></div><button data-view="taobao" class="nav-tool"><span>淘宝素材上传</span></button><button data-view="taobao-reminders" class="nav-tool"><span>淘宝商品提醒</span></button></div>
+    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><strong>谭</strong></div><button data-view="taobao" class="nav-tool"><span>淘宝素材上传</span></button><button data-view="erp-stock-rules" class="nav-tool"><span>库存规则批量上传</span></button><button data-view="taobao-reminders" class="nav-tool"><span>淘宝商品提醒</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-sycm" aria-hidden="true">董</span><strong>董卓</strong></div><button data-view="sycm" class="nav-tool"><span>生意参谋数据抓取</span></button></div>
     <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">林</span><strong>小林</strong></div><button data-view="taobao-soutu" class="nav-tool"><span>千牛搜推素材</span></button></div>
   </nav>
-  <div class="bottom">共享工作台<p>所有同事使用同一工具库</p><small id="app-version">桌面版</small><button id="check-update">↻　检查更新</button></div>
+  <div class="bottom">共享工作台<p>所有同事使用同一工具库</p><button data-view="ops">本机诊断</button><small id="app-version">桌面版</small><button id="check-update">↻　检查更新</button></div>
 </aside>
 <main>
   <header>工作空间 / <span id="crumb">项目总览</span><span class="version">本地桌面工具</span></header>
   <section id="home" aria-labelledby="home-title">
-    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">6 位同事 <span aria-hidden="true">/</span> 9 个项目</span></div>
+    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">6 位同事 <span aria-hidden="true">/</span> 10 个项目</span></div>
     <div class="home-toolbar">
       <div class="owner-filters" role="group" aria-label="按使用人筛选">
         <button data-owner-filter="all" aria-pressed="true">全部 <span>6</span></button>
@@ -29,7 +29,7 @@
       </div>
       <input id="search" type="search" placeholder="搜索人名、工具或用途" aria-label="搜索人名、工具或用途">
     </div>
-    <div class="overview-caption"><span>人员与项目</span><span id="result-count" role="status" aria-live="polite">共 8 个项目</span></div>
+    <div class="overview-caption"><span>人员与项目</span><span id="result-count" role="status" aria-live="polite">共 10 个项目</span></div>
     <div class="owner-groups">
       <div class="owner-group" data-owner="丹姐" role="group" aria-labelledby="owner-report">
         <div class="owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><h2 id="owner-report">丹姐</h2><span class="owner-count">1 个项目</span></div>
@@ -76,8 +76,14 @@
         </div>
       </div>
       <div class="owner-group" data-owner="谭" role="group" aria-labelledby="owner-taobao">
-        <div class="owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><h2 id="owner-taobao">谭</h2><span class="owner-count">2 个项目</span></div>
+        <div class="owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><h2 id="owner-taobao">谭</h2><span class="owner-count">3 个项目</span></div>
         <div class="cards">
+          <article data-search="谭 快麦 ERP 库存规则批量上传" aria-labelledby="tool-erp-stock-rules">
+            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-erp-stock-rules">库存规则批量上传</h3></div>
+            <p>按名称或编号筛选快麦库存规则，核对后逐条提交。</p>
+            <div class="tags">快麦 ERP · 库存规则</div>
+            <footer><span>更新快麦线上库存</span><button data-view="erp-stock-rules">进入工具 <span aria-hidden="true">→</span></button></footer>
+          </article>
           <article data-search="谭 淘宝 千牛 视频 素材 上传 发布 商品 文案 话题" aria-labelledby="tool-taobao">
             <div class="card-heading"><i aria-hidden="true">▷</i><h3 id="tool-taobao">淘宝素材上传</h3></div>
             <p>上传视频、生成文案与话题，整批核对后发布。</p>
@@ -225,4 +231,50 @@
     <pre id="taobao-soutu-log" aria-label="搜推素材运行记录"></pre>
   </details>
 </section>
-<div class="status">● 本地工作台<span>工具内嵌 · 统一入口</span></div></main><div role="status" id="toast" hidden></div><dialog id="update-dialog" aria-labelledby="update-title"><h2 id="update-title">检查更新</h2><p id="update-status" role="status" aria-live="polite"></p><div id="update-download-progress" hidden><div class="update-progress-heading"><span id="update-progress-label">下载进度</span><strong id="update-percent">0%</strong></div><progress id="update-progress-bar" max="100" value="0" aria-labelledby="update-progress-label"></progress><div id="update-transfer-detail"></div></div><details id="update-notes-details" hidden><summary>更新日志</summary><pre id="update-notes"></pre></details><div class="dialog-actions"><button id="close-update">关闭</button><button id="cancel-update" hidden>取消下载</button><button id="download-update" hidden>下载更新</button><button id="install-update" hidden>重启更新</button></div></dialog><script src="ui.js"></script></body></html>
+<section id="erp-stock-rules" hidden>
+  <h1>库存规则批量上传</h1><p>按名称或编号筛选，再勾选需要执行的规则。预检会核对快麦确认框并自动取消。</p>
+  <div class="toolbar">
+    <button id="erp-stock-rules-list" data-job>读取规则</button>
+    <button id="erp-stock-rules-preview" data-job disabled>预检所选规则（不上传）</button>
+    <button id="erp-stock-rules-upload" data-job disabled>上传所选库存</button>
+    <button id="erp-stock-rules-reveal" data-job disabled>显示清单文件</button>
+  </div>
+        <p id="erp-stock-rules-progress" role="status" aria-live="polite"></p>
+        <div id="erp-stock-rules-filter" class="rule-filter" hidden>
+          <label>搜索规则<input id="erp-stock-rules-search" type="search" placeholder="规则名称或编号" autocomplete="off"></label>
+          <span id="erp-stock-rules-count" role="status"></span>
+        </div>
+        <div id="erp-stock-rules-table" class="result-table"></div>
+</section>
+      <section id="ops" class="page" hidden aria-labelledby="ops-title">
+        <div class="a-header">
+          <div><h1 id="ops-title" tabindex="-1">本机诊断</h1><p id="ops-status" role="status"></p></div>
+          <div class="heading-actions"><button type="button" class="button-quiet" id="ops-refresh">重新检测</button><button type="button" id="ops-copy" disabled>复制诊断摘要</button></div>
+        </div>
+        <div class="a-overview" id="ops-metrics"></div>
+        <div class="a-segment" role="group" aria-label="诊断内容">
+          <button type="button" data-ops-view="attention" aria-pressed="true">待处理</button>
+          <button type="button" data-ops-view="all" aria-pressed="false">最近操作</button>
+          <button type="button" data-ops-view="machine" aria-pressed="false">本机环境</button>
+        </div>
+        <div id="ops-queue" class="a-ops-layout">
+          <div class="panel ops-panel" aria-labelledby="queue-title">
+            <div class="panel-heading"><h2 id="queue-title">待处理</h2></div>
+            <div id="ops-attention" class="a-task-list"></div>
+          </div>
+          <div class="panel a-task-detail" id="ops-task-detail" aria-label="任务详情"></section>
+        </div>
+        <div id="ops-machine" class="ops-grid" hidden>
+          <div class="panel ops-panel" aria-labelledby="ops-now-title">
+            <div class="panel-heading"><h2 id="ops-now-title">运行与更新</h2></div><dl id="ops-summary" class="facts"></dl>
+          </div>
+          <div class="panel ops-panel" id="ops-install-details" aria-labelledby="ops-log-title" hidden>
+            <div class="panel-heading"><h2 id="ops-log-title">最近一次更新日志</h2></div><pre class="ops-install-log" id="ops-install-log"></pre>
+          </div>
+          <div class="panel ops-panel wide" aria-labelledby="ops-logins-title">
+            <div class="panel-heading"><div><h2 id="ops-logins-title">登录与连接配置</h2><p>显示本机保存状态。账号有效性以平台验证结果为准。</p></div></div>
+            <div class="ops-login-scroll"><table class="ops-table"><thead><tr><th scope="col">连接</th><th scope="col">本机状态</th><th scope="col">相关工具</th></tr></thead><tbody id="ops-logins"></tbody></table></div>
+          </div>
+        </div>
+      </section>
+<div class="status">● 本地工作台<span>工具内嵌 · 统一入口</span></div></main><div role="status" id="toast" hidden></div><dialog id="update-dialog" aria-labelledby="update-title"><h2 id="update-title">检查更新</h2><p id="update-status" role="status" aria-live="polite"></p><div id="update-download-progress" hidden><div class="update-progress-heading"><span id="update-progress-label">下载进度</span><strong id="update-percent">0%</strong></div><progress id="update-progress-bar" max="100" value="0" aria-labelledby="update-progress-label"></progress><div id="update-transfer-detail"></div></div><details id="update-notes-details" hidden><summary>更新日志</summary><pre id="update-notes"></pre></details><div class="dialog-actions"><button id="close-update">关闭</button><button id="cancel-update" hidden>取消下载</button><button id="download-update" hidden>下载更新</button><button id="install-update" hidden>重启更新</button></div></dialog><script src="diagnostics.js"></script><script src="ui.js"></script></body></html>

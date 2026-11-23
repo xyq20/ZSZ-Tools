@@ -3,11 +3,16 @@ const {_electron}=require('playwright-core'),assert=require('node:assert/strict'
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'toolkit-taobao-ui-'));let electron;
  try{
   await fs.writeFile(path.join(temp,'红海 1.mp4'),'synthetic-video-for-read-only-scan');
-  electron=await _electron.launch({executablePath:process.env.TOOLKIT_SMOKE_EXECUTABLE||require('electron'),args:process.env.TOOLKIT_SMOKE_EXECUTABLE?[]:[path.join(__dirname,'..')],env:{...process.env,ELECTRON_RUN_AS_NODE:''}});
+  const project=path.join(__dirname,'..'),entry=path.join(temp,'main.cjs');
+  await fs.writeFile(entry,`const {app}=require('electron');
+    app.setPath('appData',${JSON.stringify(temp)});
+    app.setPath('home',${JSON.stringify(temp)});
+    require(${JSON.stringify(path.join(project,'main.cjs'))});`);
+  electron=await _electron.launch({executablePath:process.env.TOOLKIT_SMOKE_EXECUTABLE||require('electron'),args:process.env.TOOLKIT_SMOKE_EXECUTABLE?[]:[entry],env:{...process.env,ELECTRON_RUN_AS_NODE:''}});
   const page=await electron.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.locator('[data-view=taobao]').first().click();
   assert(await page.locator('#taobao').isVisible());assert(await page.locator('#taobao-prepare').isDisabled());assert(await page.locator('#taobao-publish').isDisabled());
-  await page.locator('#taobao details').evaluate(e=>e.open=true);await page.locator('#taobao-settings').click();await page.locator('#taobao-config-status').filter({hasText:'模型：deepseek-flash'}).waitFor();
+  await page.locator('#taobao details').first().evaluate(e=>e.open=true);await page.locator('#taobao-settings').click();await page.locator('#taobao-config-status').filter({hasText:'模型：deepseek-flash'}).waitFor();
   await electron.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},temp);
   await page.locator('#taobao-choose').click();await page.locator('#taobao-results').getByText('红海 1.mp4',{exact:true}).waitFor();
   assert(await page.locator('#taobao-prepare').isEnabled());assert(await page.locator('#taobao-publish').isDisabled());

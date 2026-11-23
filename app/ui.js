@@ -1,10 +1,12 @@
-const views=['home','report','price','monthly','return-rate','taobao','taobao-reminders','taobao-stock','taobao-soutu','sycm'];
-const labels={home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表','return-rate':'双姐 / 退货率报表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒','taobao-stock':'三公 / 自动库存填写','taobao-soutu':'小林 / 千牛搜推素材',sycm:'董卓 / 生意参谋数据抓取'};
+const views=['home','report','price','monthly','return-rate','taobao','taobao-reminders','taobao-stock','taobao-soutu','sycm','erp-stock-rules','ops'];
+const labels={'erp-stock-rules':'谭 / 库存规则批量上传',ops:'本机诊断',home:'项目总览',report:'丹姐 / 丹姐表格',price:'三公 / 批量导入价格',monthly:'双姐 / 分级总表','return-rate':'双姐 / 退货率报表',taobao:'谭 / 淘宝素材上传','taobao-reminders':'谭 / 淘宝商品提醒','taobao-stock':'三公 / 自动库存填写','taobao-soutu':'小林 / 千牛搜推素材',sycm:'董卓 / 生意参谋数据抓取'};
 const stockSection=document.createElement('section');
 stockSection.id='taobao-stock';stockSection.hidden=true;
 stockSection.innerHTML='<h1>自动库存填写（三公）</h1><p>中古Remake商店 · 按 Excel 二店名称和 SKU 商家编码同步库存</p><div class="toolbar"><button id="taobao-stock-login" data-job>打开二店登录</button><button id="taobao-stock-verify-login" data-job>检查登录</button><button id="taobao-stock-choose" data-job>选择库存 Excel</button><button id="taobao-stock-start" data-job>开始填写库存</button><button id="taobao-stock-resume" data-job>继续未完成任务</button><button id="taobao-stock-report" data-job>查看简洁报告</button></div><p id="taobao-stock-book">尚未选择库存表</p><p id="taobao-stock-progress" role="status" aria-live="polite">登录和任务记录保存在本机。任务中断后可继续处理。</p>';
 document.querySelector('main').insertBefore(stockSection,document.querySelector('main .status'));
-for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button[data-view]');
+ if(!button)return;
  const name=button.dataset.view;
  for(const id of views)document.getElementById(id).hidden=id!==name;
  document.getElementById('crumb').textContent=labels[name];
@@ -14,9 +16,13 @@ for(const button of document.querySelectorAll('[data-view]'))button.addEventList
   if(active)nav.setAttribute('aria-current','page');else nav.removeAttribute('aria-current');
  }
  window.scrollTo(0,0);
- if(name==='taobao-reminders')loadReminders();
- if(name==='return-rate')loadReturnRateConfig();
- if(name==='taobao-soutu')loadSoutuModel();
+ openToolName=name;
+ refreshPending=true;
+ refreshToolWhenIdle();
+ if(name==='ops') diagnostics.open(button.dataset.focus);
+ const control=document.getElementById(button.dataset.focus);
+ if(control&&!control.disabled){for(let d=control.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;control.focus();}
+
 });
 const search=document.getElementById('search');
 const ownerFilters=[...document.querySelectorAll('[data-owner-filter]')];
@@ -54,6 +60,7 @@ window.desktop?.getVersion().then(v=>document.getElementById('app-version').text
 const updateDialog=document.getElementById('update-dialog');
 document.getElementById('close-update').addEventListener('click',()=>updateDialog.close());
 function renderUpdate(r){
+ diagnostics?.renderUpdate(r);
  const messages={idle:'点击检查更新获取新版。',checking:'正在检查更新…',current:'当前已是最新版本（v'+r.current+'）。',available:r.message||'发现新版本 v'+r.latest+'，可直接下载更新。',unsupported:r.message||'当前系统或芯片的安装包尚未发布。',error:r.message,downloading:'正在下载 v'+r.latest+'，可以关闭此窗口继续工作。',preparing:r.message,downloaded:r.message||'新版已准备好，可重启更新。',installing:r.message||'正在准备更新…'};
  updateStatus.textContent=messages[r.status]||'请重新检查更新。';
  const notes=document.getElementById('update-notes'),notesDetails=document.getElementById('update-notes-details');
@@ -73,7 +80,7 @@ function renderUpdate(r){
  installButton.hidden=r.status!=='downloaded';installButton.disabled=false;
  cancelUpdateButton.hidden=!['downloading','preparing'].includes(r.status);
  cancelUpdateButton.textContent=r.status==='preparing'?'取消准备':'取消下载';
- checkButton.textContent=r.status==='downloaded'?'↻　更新已就绪':r.status==='preparing'?'↻　正在准备新版':r.status==='downloading'?'↻　下载中 '+(r.percent||0)+'%':'↻　检查更新';
+ checkButton.textContent=r.status==='downloaded'?'更新已就绪':r.status==='preparing'?'正在准备新版':r.status==='downloading'?'下载中 '+(r.percent||0)+'%':'检查更新';
 }
 window.desktop?.onUpdate?.(renderUpdate);
 checkButton.addEventListener('click',async()=>{
@@ -91,13 +98,24 @@ let hasTaobaoFolder=false,taobaoReady=false;
 let independentReminder=false;
 let soutuDirectory=false,soutuReady=false;
 let returnRateConfigured=false,hasReturnRateResult=false;
-let busy=false,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false,hasStockBook=false;
+let erpRules=null,erpRulesReady=false;
+let busy=false,currentTask=null,localTool=null,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false,hasStockBook=false;
 const statusFor=tool=>document.getElementById(tool+'-progress');
-function refreshActions(){for(const b of document.querySelectorAll('[data-job]'))b.disabled=busy;refreshSoutuActions();document.getElementById('return-rate-start').disabled=busy||!returnRateConfigured;document.getElementById('return-rate-reveal').disabled=busy||!hasReturnRateResult;document.getElementById('taobao-reminders-enabled').disabled=busy||independentReminder;document.getElementById('sycm-start').disabled=busy||!hasSycmBook;document.getElementById('sycm-results').disabled=busy;document.getElementById('taobao-prepare').disabled=busy||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=busy||!taobaoReady;document.getElementById('price-query').disabled=busy||!hasBook;document.getElementById('price-save').disabled=busy||!hasFillablePrices;document.getElementById('price-export').disabled=busy||!hasPrices;document.getElementById('report-export').disabled=busy||!hasReport;document.getElementById('taobao-stock-start').disabled=busy||!hasStockBook;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=busy||!ready;}
+function refreshActions(){const locked=busy||Boolean(currentTask);for(const b of document.querySelectorAll('[data-job]'))b.disabled=locked;refreshSoutuActions();refreshErpRulesActions(locked);document.getElementById('return-rate-start').disabled=locked||!returnRateReady();document.getElementById('return-rate-reveal').disabled=locked||!hasReturnRateResult;document.getElementById('taobao-reminders-enabled').disabled=locked||independentReminder;document.getElementById('sycm-start').disabled=locked||!hasSycmBook;document.getElementById('sycm-results').disabled=locked;document.getElementById('taobao-prepare').disabled=locked||!hasTaobaoFolder;document.getElementById('taobao-publish').disabled=locked||!taobaoReady;document.getElementById('price-query').disabled=locked||!hasBook;document.getElementById('price-save').disabled=locked||!hasFillablePrices;document.getElementById('price-export').disabled=locked||!hasPrices;document.getElementById('report-export').disabled=locked||!hasReport;document.getElementById('taobao-stock-start').disabled=locked||!hasStockBook;for(const [id,ready] of [['monthly-preview',hasMonthlyBook],['monthly-save',canSaveMonthly],['monthly-export',hasMonthlyPreview],['monthly-reports',hasMonthlyReport]])document.getElementById(id).disabled=locked||!ready;}
 async function call(action,...args){if(!window.desktop?.business)throw Error('请在新版桌面程序中使用此功能');const r=await window.desktop.business(action,...args);if(!r.ok)throw Error(r.error);return r.data;}
-async function run(tool,fn){if(busy)return;busy=true;refreshActions();try{await fn();}catch(e){statusFor(tool).textContent=e.message;}finally{busy=false;refreshActions();}}
+async function run(tool,fn){
+ if(busy||currentTask)return;
+ busy=true;
+ localTool=tool;
+ diagnostics.setJob(currentTask||{tool});
+ refreshActions();
+ try{await fn();}
+ catch(error){statusFor(tool).textContent=error.message;}
+ finally{busy=false;localTool=null;diagnostics.setJob(currentTask);refreshActions();refreshToolWhenIdle();}
+}
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
 window.desktop?.onProgress(({ tool, message, batch }) => {
+  diagnostics?.setProgress(tool,message);
   if (tool === 'return-rate' && batch) renderReturnRateProgress(batch);
   if (tool === 'taobao-soutu' && batch) renderSoutuBatch(batch, message);
   else if (tool !== 'taobao-soutu' || soutuField('batch').hidden) statusFor(tool).textContent = message;
@@ -108,7 +126,7 @@ window.desktop?.onProgress(({ tool, message, batch }) => {
     log.scrollTop = log.scrollHeight;
   }
 });
-for(const button of document.querySelectorAll('[data-login]'))button.addEventListener('click',async()=>{const tool=button.dataset.login;try{await call('login',tool);statusFor(tool).textContent='请在登录窗口完成登录，返回后点击查询。';}catch(e){statusFor(tool).textContent=e.message;}});
+for(const button of document.querySelectorAll('[data-login]'))button.addEventListener('click',async()=>{const tool=button.dataset.login;try{await call('login',tool);statusFor(tool).textContent='请在登录窗口完成登录，返回后点击查询。';}catch(e){statusFor(tool).textContent=e.message;}finally{}});
 document.getElementById('choose').addEventListener('click',()=>run('price',async()=>{const b=await call('choose');if(!b)return;hasBook=true;hasPrices=false;hasFillablePrices=false;document.getElementById('book').textContent=`${b.name} · ${b.sheet} · ${b.rows} 行`;document.getElementById('price-results').replaceChildren();statusFor('price').textContent=`文件已读取：待补价格 ${b.pending} 行，已有内容或公式 ${b.skipped} 行将跳过。`;}));
 document.getElementById('price-query').addEventListener('click',()=>run('price',async()=>{hasPrices=false;hasFillablePrices=false;document.getElementById('price-results').replaceChildren();statusFor('price').textContent='开始查询空白价格…';const rows=await call('price-query');hasPrices=true;table('price-results',['行','货号','商品名称','原价格','淘宝价格','状态','说明'],rows.map(r=>[r.row,r.code,r.name,r.original,r.price,r.status,r.reason]));const n=rows.filter(r=>r.status==='待填入').length,skipped=rows.filter(r=>['已有价格','公式保留'].includes(r.status)).length;hasFillablePrices=n>0;statusFor('price').textContent=`核对完成：跳过 ${skipped} 行，${n} 行可补价格，${rows.length-skipped-n} 行待核对。${n?'请核对结果后确认填入。':''}`;}));
 document.getElementById('price-save').addEventListener('click',()=>run('price',async()=>{const r=await call('price-save');if(r){hasPrices=false;hasFillablePrices=false;statusFor('price').textContent=`已填入 ${r.count} 行空白价格并回读验证。备份：${r.backup}`;document.getElementById('price-results').replaceChildren();}}));
@@ -124,6 +142,96 @@ statusFor('report').textContent=`${r.shops} 家店铺、${r.monthly.length} 个�
 refreshActions();
 
 const returnRateField = name => document.getElementById(`return-rate-${name}`);
+
+function erpRuleField(name){return document.getElementById('erp-stock-rules-'+name);}
+function checkedErpRules(){
+ return [...erpRuleField('table').querySelectorAll('input:checked')].map(input=>Number(input.value));
+}
+function filterErpRules(){
+ const filter=erpRuleField('filter');
+ filter.hidden=!erpRules?.length;
+ if(filter.hidden)return;
+ const query=erpRuleField('search').value.trim().normalize('NFKC').toLowerCase();
+ let matches=0,selected=0,hiddenSelected=0;
+ const rows=erpRuleField('table').querySelectorAll('tbody tr');
+ for(const [index,rule] of erpRules.entries()){
+  const row=rows[index];
+  const match=String(rule.number)===query||rule.name.normalize('NFKC').toLowerCase().includes(query);
+  row.hidden=!match;
+  if(match)matches++;
+  if(row.querySelector('input').checked){
+   selected++;
+   if(!match)hiddenSelected++;
+  }
+ }
+ const prefix=matches?'显示 '+matches+' / '+erpRules.length+' 条':'没有匹配的规则';
+ erpRuleField('count').textContent=prefix+' · 已选 '+selected+' 条'+(hiddenSelected?'（其中 '+hiddenSelected+' 条在筛选外）':'');
+}
+function refreshErpRulesActions(locked){
+ const count=checkedErpRules().length;
+ erpRuleField('preview').disabled=locked||!erpRulesReady||!count;
+ erpRuleField('upload').disabled=locked||!erpRulesReady||!count;
+ erpRuleField('upload').textContent=count?`上传所选库存（${count} 条）`:'上传所选库存';
+ erpRuleField('reveal').disabled=locked||!erpRules;
+ for(const input of erpRuleField('table').querySelectorAll('input')){
+  input.disabled=locked||!erpRulesReady||input.dataset.manual!=='启用';
+ }
+}
+function renderErpRules(){
+ table('erp-stock-rules-table',['选择','编号','规则名称','优先级','手动上传','生效','创建时间','本批结果'],
+  erpRules.map(rule=>['',rule.number,rule.name,rule.priority,rule.manual_status,rule.effective_status,rule.created_at,rule.result]));
+ const rows=erpRuleField('table').querySelectorAll('tbody tr');
+ for(const [index,rule] of erpRules.entries()){
+  const input=document.createElement('input');
+  input.type='checkbox';
+  input.value=rule.number;
+  input.dataset.manual=rule.manual_status;
+  input.setAttribute('aria-label',`选择 ${rule.name}，优先级 ${rule.priority}`);
+  rows[index].firstElementChild.append(input);
+ }
+}
+erpRuleField('search').addEventListener('input',filterErpRules);
+erpRuleField('table').addEventListener('change',()=>{
+ filterErpRules();
+ refreshActions();
+});
+erpRuleField('list').addEventListener('click',()=>run('erp-stock-rules',async()=>{
+ erpRules=null;erpRulesReady=false;
+ erpRuleField('table').replaceChildren();
+ erpRuleField('search').value='';
+ filterErpRules();
+ erpRuleField('progress').textContent='正在读取规则…';
+ erpRules=await call('erp-stock-rules-list');
+ erpRulesReady=erpRules.length>0;
+ renderErpRules();
+ filterErpRules();
+ erpRuleField('progress').textContent=`共 ${erpRules.length} 条规则。`;
+}));
+for(const action of ['preview','upload']){
+ erpRuleField(action).addEventListener('click',()=>{
+  const numbers=checkedErpRules();
+  if(!erpRulesReady||!numbers.length)return;
+  run('erp-stock-rules',async()=>{
+   let result;
+   try{result=await call('erp-stock-rules-'+action,numbers);}
+   catch(error){if(action==='upload')erpRulesReady=false;throw error;}
+   if(!result){erpRuleField('progress').textContent='已取消提交。';return;}
+   const erpRulesSubmitted=action==='upload';
+   if(erpRulesSubmitted)erpRulesReady=false;
+   const statuses=new Map(result.rows.map(item=>[item.number,item.status]));
+   for(const rule of erpRules)rule.result=statuses.get(rule.number)||'';
+   renderErpRules();
+   if(!erpRulesSubmitted){
+    for(const input of erpRuleField('table').querySelectorAll('input'))input.checked=numbers.includes(Number(input.value));
+   }
+   filterErpRules();
+   erpRuleField('progress').textContent=result.complete
+    ? action==='upload'?`快麦已受理 ${result.rows.length} 条规则。`:`已预览 ${result.rows.length} 条规则，确认框均已取消。`
+    : `本批已停止。请查看各规则结果。${result.error||''}`;
+  });
+ });
+}
+erpRuleField('reveal').addEventListener('click',()=>run('erp-stock-rules',()=>call('erp-stock-rules-reveal')));
 const paidMonthParts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Shanghai', year:'numeric', month:'2-digit'})
   .formatToParts(new Date());
 const paidYear = Number(paidMonthParts.find(part => part.type === 'year').value);
@@ -131,6 +239,11 @@ const paidMonth = Number(paidMonthParts.find(part => part.type === 'month').valu
 const lastPaidMonth = `${paidMonth===1 ? paidYear-1 : paidYear}-${String(paidMonth===1 ? 12 : paidMonth-1).padStart(2,'0')}`;
 returnRateField('month').value = lastPaidMonth;
 returnRateField('month').max = lastPaidMonth;
+
+function returnRateReady() {
+  return returnRateConfigured && /^\d{1,20}$/.test(returnRateField('company').value.trim());
+}
+returnRateField('company').addEventListener('input',refreshActions);
 
 function renderReturnRateConfig(state) {
   returnRateConfigured = state.configured;
@@ -370,18 +483,19 @@ function updateSoutuRows(results) {
 }
 
 function refreshSoutuActions() {
+  const locked = busy || Boolean(currentTask);
   const choices = [...soutuField('rows').querySelectorAll('input[type="checkbox"]')];
   const valid = choices.filter(input => input.closest('tr').dataset.valid === 'true');
   const count = valid.filter(input => input.checked).length;
-  choices.forEach(input => { input.disabled = busy || input.closest('tr').dataset.valid !== 'true'; });
+  choices.forEach(input => { input.disabled = locked || input.closest('tr').dataset.valid !== 'true'; });
   const all = soutuField('all');
-  all.disabled = busy || !valid.length;
+  all.disabled = locked || !valid.length;
   all.checked = Boolean(valid.length && count === valid.length);
   all.indeterminate = count > 0 && count < valid.length;
-  soutuField('scan').disabled = busy || !soutuDirectory;
-  soutuField('plan').disabled = busy || !count;
-  soutuField('publish').disabled = busy || !soutuReady;
-  soutuField('archive').disabled = busy || !soutuDirectory;
+  soutuField('scan').disabled = locked || !soutuDirectory;
+  soutuField('plan').disabled = locked || !count;
+  soutuField('publish').disabled = locked || !soutuReady;
+  soutuField('archive').disabled = locked || !soutuDirectory;
 }
 
 function renderSoutuFolder(result) {
@@ -499,7 +613,7 @@ function renderReminders(state) {
  independentReminder = state.nativeAgent;
  reminderField('at').value = state.at;
  reminderField('enabled').checked = state.enabled;
- reminderField('enabled').disabled = busy || independentReminder;
+ reminderField('enabled').disabled = busy || Boolean(currentTask) || independentReminder;
  reminderField('recipient').value = state.recipient;
  reminderField('webhook').placeholder = state.hasWebhook ? '已配置，留空沿用' : '仅加密保存在本机';
  for (const field of ['webhook','enabled']) reminderField(field).closest('label').hidden = state.nativeAgent;
@@ -510,6 +624,7 @@ function renderReminders(state) {
   state.nativeAgent ? `独立巡检时间 ${state.at}` : state.enabled ? `工具箱每天 ${state.at} 巡检` : '工具箱定时未启用',
  ].filter(Boolean).join(' · ');
  statusFor('taobao-reminders').textContent = state.message || '';
+ refreshActions();
 }
 function loadReminders() {
  return call('taobao-reminders-status').then(renderReminders).catch(error => {
@@ -544,6 +659,31 @@ reminderField('run-now').addEventListener('click', () => run('taobao-reminders',
  reminderField('result').textContent = state.message;
  reminderField('result').hidden = false;
 }));
+
+let openToolName=null,refreshPending=false;
+function refreshToolWhenIdle(){
+ if(!refreshPending||busy||currentTask)return;
+ refreshPending=false;
+ if(openToolName==='taobao-reminders')loadReminders();
+ if(openToolName==='return-rate')loadReturnRateConfig();
+ if(openToolName==='taobao-soutu')loadSoutuModel();
+}
+const diagnostics=setupDiagnostics({request:call,toast(message){
+ const target=document.getElementById('toast');
+ clearTimeout(toastTimeout);target.textContent=message;target.hidden=false;
+ toastTimeout=setTimeout(()=>{target.hidden=true;},2500);
+}});
+let toastTimeout;
+let taskEventSeen=false;
+function renderTask(task){
+ currentTask=task;
+ diagnostics.setJob(task||(localTool?{tool:localTool}:null));
+ refreshActions();
+ refreshToolWhenIdle();
+}
+window.desktop?.onBusy?.(task=>{taskEventSeen=true;renderTask(task);});
+if(window.desktop?.business)call('task-state').then(task=>{if(!taskEventSeen)renderTask(task);}).catch(()=>{});
+window.desktop?.updateState?.().then(renderUpdate).catch(()=>{});
 
 // Report readiness after all page handlers are registered and the controls have been painted.
 requestAnimationFrame(()=>requestAnimationFrame(()=>{

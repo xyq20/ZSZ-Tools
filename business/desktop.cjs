@@ -5,12 +5,22 @@ const {centerWorkbook}=require('./workbook-style.cjs');
 const {createMonthlyTool}=require('./monthly.cjs');
 const {requestInErpPage,validatePayload}=require('./erp-page.cjs');
 const {restoreWindow,bindLoginWindow}=require('./windows.cjs');
+const {AsyncLocalStorage}=require('node:async_hooks');
+const {toolOf,createRedactor,createActivity,createDiagnostics,registerReadOnly}=require('./diagnostics.cjs');
 function setupBusiness(win,app){
  let selected=null,priceResult=null,reportResult=null,busy=false,updateLocked=false;const loginWindows=new Map();
  const origins={price:'https://vipscm.superboss.cc',report:'https://viperp.superboss.cc',monthly:'https://erpa.superboss.cc'};
  const sessions={price:session.fromPartition('persist:toolkit-scm'),report:session.fromPartition('persist:toolkit-erp')};
  sessions.monthly=sessions.report;
  const progress=(tool,message,batch)=>{if(!win.isDestroyed())win.webContents.send('business-progress',{tool,message,batch});};
+ const requestContext=new AsyncLocalStorage();
+ const redact=createRedactor({home:app.getPath('home')});
+ const activity=createActivity({directory:path.join(app.getPath('userData'),'logs'),redact});
+ let running=null;
+ function reportRunning(value){
+  running=value;
+  if(!win.isDestroyed())win.webContents.send('business-busy',running);
+ }
  const loginState=createLoginState({directory:path.join(app.getPath('userData'),'login-state'),sessions:{price:sessions.price,report:sessions.report},encryption:safeStorage,onError:message=>{progress('price',message);progress('report',message);progress('monthly',message);}});
  const loginReady=loginState.restore();
  async function request(tool,route,body){
@@ -24,8 +34,35 @@ function setupBusiness(win,app){
   let payload;try{payload=await response.json();}catch{throw Error('未返回有效数据，请先登录对应快麦账号');}
   return validatePayload(payload);
  }
- function handle(name,fn){ipcMain.handle(name,async(e,...args)=>{if(e.sender!==win.webContents)throw Error('非法调用来源');try{if(updateLocked)throw Error('正在准备重启更新，请稍候');return {ok:true,data:await fn(...args)};}catch(error){return {ok:false,error:error.message};}});}
- async function exclusive(fn){if(busy)throw Error('已有任务正在执行，请等待完成');busy=true;try{return await fn();}finally{busy=false;}}
+ function handle(name,fn){
+  const action=name.slice('business-'.length);
+  ipcMain.handle(name,async(event,...args)=>{
+   if(event.sender!==win.webContents)throw Error('非法调用来源');
+   const tool=action==='login'&&Object.hasOwn(origins,args[0])?args[0]:toolOf(action);
+   const started=Date.now();
+   try{
+    if(updateLocked)throw Error('正在准备重启更新，请稍候');
+    const data=await requestContext.run({action,tool},()=>fn(...args));
+    activity.record({action,tool,ok:true,ms:Date.now()-started});
+    return {ok:true,data};
+   }catch(error){
+    activity.record({action,tool,ok:false,ms:Date.now()-started,error:error.message});
+    return {ok:false,error:error.message};
+   }
+  });
+ }
+ async function exclusive(fn,context=requestContext.getStore()){
+  if(busy)throw Error('已有任务正在执行，请等待完成');
+  busy=true;
+  reportRunning({...context,since:Date.now()});
+  try{return await fn();}
+  finally{busy=false;reportRunning(null);}
+ }
+ async function runReminder(fn){
+  const context={tool:'taobao-reminders',action:'taobao-reminders-scheduled'};
+  try{return await exclusive(fn,context);}
+  catch(error){activity.record({...context,ok:false,error:error.message});throw error;}
+ }
  async function loginWindow(tool,show=true){
   await loginReady;
   if(!origins[tool])throw Error('未知工具');if(loginWindows.has(tool)){const existing=loginWindows.get(tool);if(show)restoreWindow(existing);return existing;}
@@ -53,10 +90,17 @@ function setupBusiness(win,app){
  handle('business-return-rate-status', returnRate.status);
  for(const [action,method] of [['import','importConfig'],['start','start'],['reveal','reveal']])
   handle('business-return-rate-'+action,(...args)=>exclusive(()=>returnRate[method](...args)));
+ const erpStockRules=require('./erp-stock-rules.cjs').createErpStockRulesTool({
+  app,win,dialog,shell:require('electron').shell,
+  getCookies:async url=>{await loginReady;return sessions.monthly.cookies.get({url});},
+  progress:message=>progress('erp-stock-rules',message)
+ });
+ for(const action of ['list','preview','upload','reveal'])
+  handle('business-erp-stock-rules-'+action,(...args)=>exclusive(()=>erpStockRules[action](...args)));
  const taobao=require('./taobao.cjs').createTaobaoTool({app,win,dialog,safeStorage,progress:message=>progress('taobao',message)});
  for(const [action,method] of [['taobao-settings','settings'],['taobao-save-key','saveKey'],['taobao-login','login'],['taobao-choose','choose'],['taobao-prepare','prepare'],['taobao-publish','publish'],['taobao-history','history']])handle('business-'+action,(...args)=>exclusive(()=>taobao[method](...args)));
  const reminders=require('./taobao-reminders.cjs').createTaobaoReminders({
-  app,safeStorage,exclusive,blocked:()=>busy||updateLocked,progress:message=>progress('taobao-reminders',message)
+  app,safeStorage,exclusive:runReminder,blocked:()=>busy||updateLocked,progress:message=>progress('taobao-reminders',message)
  });
  handle('business-taobao-reminders-status',reminders.status);
  for(const method of ['save','login','preview'])handle('business-taobao-reminders-'+method,(...args)=>exclusive(()=>reminders[method](...args)));
@@ -71,7 +115,10 @@ function setupBusiness(win,app){
  for(const [action,method] of [['login','login'],['choose','choose'],['scan','scan'],['plan','plan'],['publish','publish'],['history','history'],['resolve','resolvePending'],['archive','openArchive']])handle('business-taobao-soutu-'+action,(...args)=>exclusive(()=>soutu[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
+ const diagnostics=createDiagnostics({app,safeStorage,sessions,loginReady,reminders,getRunning:()=>running,activity,redact});
+ registerReadOnly({ipcMain,win,redact},'business-ops-snapshot',diagnostics.snapshot);
+ registerReadOnly({ipcMain,win,redact},'business-task-state',()=>running);
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});
- return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();await soutu.cleanup();},isBusy:()=>busy};
+ return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();await soutu.cleanup();await activity.flush();},isBusy:()=>busy};
 }
 module.exports={setupBusiness};

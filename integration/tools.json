@@ -105,6 +105,13 @@
         "return_report.py": "business/return-rate-python/return_report.py",
         "report-query.json": "business/return-rate-python/report-query.json"
       }
+    },
+    "erp-stock-rules": {
+      "source": "../../../Documents/ChatGPT/上传库存规则批量点击（谭）",
+      "files": {
+        "upload_rules.py": "business/erp-stock-rules-python/upload_rules.py",
+        "toolbox_bridge.py": "business/erp-stock-rules-python/bridge.py"
+      }
     }
   }
 }

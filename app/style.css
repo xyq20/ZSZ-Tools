@@ -82,7 +82,7 @@ p{color:#8490a0;line-height:1.9}
 
 #update-notes{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.8;color:#637286;background:#f5f6f8;padding:18px;border-radius:8px}.bottom button{margin-top:12px;padding-left:0}
 
-dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radius:14px;padding:28px;background:#fff;color:#28313d;box-shadow:0 20px 70px #23324926}dialog::backdrop{background:#25334440}dialog h2{margin:0 0 16px;font-size:20px}dialog p{color:#637286}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}#close-update{background:#edf0f3;color:#637286}#update-notes{max-height:240px;overflow:auto}
+dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radius:14px;padding:28px;background:#fff;color:#28313d;box-shadow:0 20px 70px #23324926}dialog::backdrop{background:rgb(0 0 0 / 10%)}dialog h2{margin:0 0 16px;font-size:20px}dialog p{color:#637286}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}#close-update{background:#edf0f3;color:#637286}#update-notes{max-height:240px;overflow:auto}
 .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0}.result-table{overflow:auto;max-height:55vh;border-radius:8px;background:white}.result-table table{width:100%;border-collapse:collapse;font-size:12px}.result-table th{position:sticky;top:0;background:#edf0f3;text-align:left}.result-table th,.result-table td{padding:12px;border-bottom:1px solid #e5e8ed;white-space:nowrap}.result-table td:last-child{white-space:normal;min-width:180px}#price-progress,#report-progress{overflow-wrap:anywhere;color:#576579}.form{flex-wrap:wrap;margin-top:22px}
 .result-table tfoot th,.result-table tfoot td{position:sticky;top:auto;bottom:0;background:#e6f1eb;color:#256d50;font-weight:600;border-top:2px solid #c6dfd1}
 
@@ -125,3 +125,18 @@ dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radiu
 .return-rate-excluded{display:grid;gap:7px;margin:14px 0;color:#576579;font-size:13px}
 .return-rate-excluded textarea{font:inherit;color:inherit;resize:vertical;background:white;border:1px solid #d8dce5;border-radius:7px;padding:10px}
 #return-rate-progress{overflow-wrap:anywhere}
+
+/* Additional tools follow the project overview's existing panel and table layout. */
+.rule-filter,.heading-actions,.a-segment,.a-overview{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}
+.rule-filter input{padding:8px 10px;margin-left:8px;border:1px solid #ced7df;border-radius:6px}
+#ops .a-ops-layout,#ops .ops-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px}
+#ops .panel{padding:14px;background:white;border:1px solid #dfe5e8;border-radius:10px;min-width:0}
+#ops .wide{grid-column:1/-1}
+#ops button[aria-pressed=true]{background:#257750;color:white}
+#ops .a-task-list{display:grid;gap:6px}
+#ops .a-task,#ops .a-segment button:not([aria-pressed=true]){background:#edf2ef;color:#284b37;text-align:left}
+#ops .a-task small,#ops .a-task .status-label{display:block;margin-top:3px}
+#ops .facts div,#ops dl>div{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid #e4ebe7}
+#ops dd{margin:0;overflow-wrap:anywhere}#ops .ops-login-scroll{overflow:auto}
+#ops .ops-install-log{white-space:pre-wrap;overflow-wrap:anywhere}
+#erp-stock-rules-table{overflow:auto;max-height:58vh}#erp-stock-rules-table th{position:sticky;top:0;background:#f2f5f3}

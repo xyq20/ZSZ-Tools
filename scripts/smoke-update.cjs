@@ -11,6 +11,22 @@ require(${JSON.stringify(path.join(project,'main.cjs'))});
  try{
  electron=await _electron.launch({executablePath:require('electron'),args:[bootstrap],env:{...process.env,ELECTRON_RUN_AS_NODE:''}});
  const page=await electron.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ // Sample a white part of the toolbar, outside the dialog and its shadow.
+ const sharp=require('sharp');
+ async function toolbarPixel(){
+  const image=await page.screenshot({scale:'css',clip:{x:220,y:4,width:1,height:1}});
+  return [...await sharp(image).extract({left:0,top:0,width:1,height:1}).removeAlpha().raw().toBuffer()];
+ }
+ const initial=await toolbarPixel();
+ await page.locator('#check-update').click();await page.locator('#download-update').waitFor({state:'visible'});
+ const shaded=await toolbarPixel();
+ assert(initial.every(channel=>channel>=235));
+ const dimming=initial.map((value,i)=>value-shaded[i]);
+ assert(dimming.every(delta=>delta>=18&&delta<=28) && Math.max(...dimming)-Math.min(...dimming)<=1,`expected a light neutral overlay: ${initial} → ${shaded}`);
+ await page.keyboard.press('Escape');
+ assert(await page.locator('#update-dialog').isHidden());
+ assert.deepEqual(await toolbarPixel(),initial);
+ console.log('Toolbar before / during / after dialog:', initial, shaded, initial);
  await page.locator('#check-update').click();await page.locator('#download-update').waitFor({state:'visible'});
  assert.equal(await page.locator('#update-notes-details').getAttribute('open'),null);
  await page.locator('#download-update').click();await page.locator('#cancel-update').waitFor({state:'visible'});assert(await page.locator('#update-progress-bar').isVisible());await page.locator('#cancel-update').click();await page.locator('#update-status').filter({hasText:'下载已取消'}).waitFor();

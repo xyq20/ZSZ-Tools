@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.41",
+  "version": "0.4.52",
   "private": true,
   "main": "bootstrap.cjs",
   "scripts": {
@@ -45,7 +45,8 @@
       "!business/sycm-python/**/*",
       "!business/taobao-stock/**/*",
       "!business/hot_update.py",
-      "!business/return-rate-python/**/*"
+      "!business/return-rate-python/**/*",
+      "!business/erp-stock-rules-python/**/*"
     ],
     "mac": {
       "extendInfo": {
@@ -139,6 +140,14 @@
           "bridge.py",
           "return_report.py",
           "report-query.json"
+        ]
+      },
+      {
+        "from": "business/erp-stock-rules-python",
+        "to": "erp-stock-rules-python",
+        "filter": [
+          "bridge.py",
+          "upload_rules.py"
         ]
       }
     ],

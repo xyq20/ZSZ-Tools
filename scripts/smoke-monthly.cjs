@@ -21,6 +21,7 @@ app.whenReady().then(async()=>{
   dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});
   dialog.showMessageBox=async()=>({response:1});
   dialog.showSaveDialog=async()=>({canceled:false,filePath:path.join(directory,'核对.xlsx')});
+  ipcMain.handle('main-window-ready',()=>{});ipcMain.handle('update-state',()=>({status:'idle'}));
   ipcMain.handle('app-version',()=>require(path.join(project,'package.json')).version);
   win=new BrowserWindow({show:false,width:1280,height:850,webPreferences:{preload:path.join(project,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   business=require(path.join(project,'business/desktop.cjs')).setupBusiness(win,app);
@@ -29,13 +30,13 @@ app.whenReady().then(async()=>{
   const wait=async expression=>{for(let i=0;i<400;i++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out waiting for UI: '+expression);};
   await evaluate(\"document.querySelector('aside [data-view=monthly]').click();document.getElementById('monthly-date').value='2026-10-02';document.getElementById('monthly-choose').click()\");
   await wait(\"document.getElementById('monthly-progress').textContent.includes('总表已读取')\");
-  assert.equal(await evaluate(\"document.getElementById('crumb').textContent\"),'总表（双姐）');
-  assert.equal(await evaluate("document.querySelectorAll('.monthly-help details').length"),2);
-  await evaluate("document.querySelectorAll('.monthly-help details').forEach(d=>d.open=true)");
-  assert.equal(await evaluate("document.querySelector('.monthly-help').textContent.includes('文件按运行月份命名')"),true);
+  assert.equal(await evaluate(\"document.getElementById('crumb').textContent\"),'双姐 / 分级总表');
+  assert.equal(await evaluate("document.querySelectorAll('#monthly .monthly-help details').length"),2);
+  await evaluate("document.querySelectorAll('#monthly .monthly-help details').forEach(d=>d.open=true)");
+  assert.equal(await evaluate("document.querySelector('#monthly .monthly-help').textContent.includes('文件按运行月份命名')"),true);
   await new Promise(r=>setTimeout(r,250));
   fs.writeFileSync(path.join(directory,'help.png'),(await win.webContents.capturePage()).toPNG());
-  await evaluate("document.querySelectorAll('.monthly-help details').forEach(d=>d.open=false)");
+  await evaluate("document.querySelectorAll('#monthly .monthly-help details').forEach(d=>d.open=false)");
   await evaluate(\"document.querySelector('[data-login=monthly]').click()\");
   await new Promise(r=>setTimeout(r,300));
   const login=BrowserWindow.getAllWindows().find(w=>w!==win);assert(login);assert.equal(login.getParentWindow(),null);

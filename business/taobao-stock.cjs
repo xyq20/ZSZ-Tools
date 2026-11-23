@@ -136,10 +136,15 @@ function createTaobaoStockTool({app,win,dialog,shell,progress,runner=spawn,
    if(!worker)return Promise.resolve();
    return new Promise(resolve=>{
     const current=worker;
-    const done=()=>resolve();
+    const done=()=>{
+     clearTimeout(timer);
+     current.removeListener('close',done);
+     resolve();
+    };
+    const timer=setTimeout(()=>{if(!current.killed)current.kill();done();},3000);
+    timer.unref();
     current.once('close',done);
     current.stdin.end(JSON.stringify({action:'shutdown',request_id:String(++requestId)})+'\n');
-    setTimeout(()=>{if(!current.killed)current.kill();resolve();},3000).unref();
    });
   }
  };
