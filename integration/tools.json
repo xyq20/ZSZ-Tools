@@ -103,7 +103,8 @@
       "source": "../../../Documents/ChatGPT/退货率（双姐）",
       "files": {
         "return_report.py": "business/return-rate-python/return_report.py",
-        "report-query.json": "business/return-rate-python/report-query.json"
+        "report-query.json": "business/return-rate-python/report-query.json",
+        "excluded-codes.json": "business/return-rate-python/excluded-codes.json"
       }
     },
     "erp-stock-rules": {

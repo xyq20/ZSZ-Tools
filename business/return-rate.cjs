@@ -45,6 +45,7 @@ function createReturnRateTool({app, win, dialog, shell, safeStorage, progress, r
     ...runtimePaths(app),
     bridge: path.join(app.isPackaged ? process.resourcesPath : __dirname, 'return-rate-python', 'bridge.py'),
   };
+  const fixedExcludedCodes = require(path.join(path.dirname(paths.bridge), "excluded-codes.json"));
   let resultFile;
 
   async function savedConfig() {
@@ -81,8 +82,13 @@ function createReturnRateTool({app, win, dialog, shell, safeStorage, progress, r
   }
 
   async function status() {
-    const found = await findConfig();
-    return {configured: Boolean(found), source: found?.source || '', companyId: found?.companyId || await localCompanyId()};
+    try {
+      const found = await findConfig();
+      return {configured: Boolean(found), source: found?.source || '',
+        companyId: found?.companyId || await localCompanyId(), fixedExcludedCodes};
+    } catch (error) {
+      return {configured:false, source:error.message, companyId:'', fixedExcludedCodes};
+    }
   }
 
   async function importConfig() {

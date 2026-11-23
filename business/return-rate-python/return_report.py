@@ -40,6 +40,7 @@ PAGE_SIZE = 100
 CODE_BATCH = 50
 TAOBAO_SOURCE = "tb"
 REPORT_STEPS = 10
+FIXED_EXCLUDED_CODES = tuple(json.loads((ROOT / "excluded-codes.json").read_text(encoding="utf-8")))
 
 
 def shop_list(config):
@@ -404,6 +405,7 @@ def month_window(month):
 def run_report(month, selection_group, minimum, official_config, company_id, output,
                excluded_codes=(), *, profile=PROFILE, reuse_debug_port=True, progress=None):
     """Collect the approved paid-month report, then publish its workbook."""
+    excluded_codes = tuple(dict.fromkeys((*FIXED_EXCLUDED_CODES, *excluded_codes)))
     start, end = month_window(month)
     if not isinstance(minimum, int) or minimum < 1:
         raise ValueError("销量门槛必须是正整数")
@@ -445,7 +447,7 @@ def main():
     parser.add_argument("month", help="统计月份，例如 2026-10")
     parser.add_argument("--shop-group", default="钊叔制", help="仅用于筛选商家编码的店铺分组")
     parser.add_argument("--minimum-sales", type=int, default=100)
-    parser.add_argument("--exclude-code", action="append", default=[], help="排除商家编码，可重复指定")
+    parser.add_argument("--exclude-code", action="append", default=[], help="追加排除的商家编码，可重复指定")
     parser.add_argument("--official-config", type=Path, default=OFFICIAL_CONFIG)
     parser.add_argument("--company-id", help="默认从本机现有快麦同步项目读取")
     parser.add_argument("--output", type=Path)

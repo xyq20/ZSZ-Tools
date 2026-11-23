@@ -247,6 +247,11 @@ returnRateField('company').addEventListener('input',refreshActions);
 
 function renderReturnRateConfig(state) {
   returnRateConfigured = state.configured;
+  if (state.fixedExcludedCodes?.length) {
+    const fixed = returnRateField('fixed-exclusions');
+    fixed.textContent = '每月固定排除：' + state.fixedExcludedCodes.join('、');
+    fixed.hidden = false;
+  }
   returnRateField('config').textContent = state.source || '请导入快麦开放平台 JSON 配置。';
   if (state.companyId && !returnRateField('company').value) returnRateField('company').value = state.companyId;
   if (!state.configured || !returnRateField('company').value) returnRateField('settings').open = true;

@@ -132,7 +132,8 @@
       <label>选款店铺分组<input id="return-rate-group" value="钊叔制" required maxlength="100" data-job></label>
       <label>最低销量（件）<input id="return-rate-minimum" type="number" min="1" step="1" value="100" required data-job></label>
     </div>
-    <label class="return-rate-excluded">排除商家编码（可选）
+    <p id="return-rate-fixed-exclusions" hidden></p>
+    <label class="return-rate-excluded">追加排除商家编码（可选）
       <textarea id="return-rate-excluded" rows="3" maxlength="20000" placeholder="多个编码用逗号或换行分隔" data-job></textarea>
     </label>
     <details id="return-rate-settings">

@@ -52,7 +52,7 @@ test('return rate imports local configuration and reports progress only after sa
     });
     assert.equal((await tool.status()).configured,false);
     const state = await tool.importConfig();
-    assert.deepEqual(state,{configured:true,source:'已导入本机配置',companyId:'123'});
+    assert.deepEqual(state,{configured:true,source:'已导入本机配置',companyId:'123',fixedExcludedCodes:['卷尺','AA','NGBL-A','ML1002','LF55','ML1003']});
     assert.equal(await tool.start(options),null);
     assert.equal(launched,0);
     const result=await tool.start(options);

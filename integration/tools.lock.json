@@ -291,16 +291,20 @@
     },
     "return-rate": {
       "source": "../../../Documents/ChatGPT/退货率（双姐）",
-      "commit": "95304db7275398245d66cc2756a7682d997e2e55",
+      "commit": "07141512345d29857ada55db8ee6edf0facfd0a4",
       "dirty": false,
       "files": {
         "return_report.py": {
           "target": "business/return-rate-python/return_report.py",
-          "sha256": "26568e3d8fd9827530fda2af421426ddb8f591b9a48d6408dab8ccc97c772323"
+          "sha256": "cd55471cab6da3f34f52fc4a2f499e9c09475010afaf6a1355d5ffbefe69645f"
         },
         "report-query.json": {
           "target": "business/return-rate-python/report-query.json",
           "sha256": "285f0fa9684ef09484c88ce663c083d07b24229854779c6e1df46633efa61351"
+        },
+        "excluded-codes.json": {
+          "target": "business/return-rate-python/excluded-codes.json",
+          "sha256": "a24f1fdad3e175ef299fd5182cd33d6e5e7723b4b9998e9233cb750aa682a5a7"
         }
       }
     },

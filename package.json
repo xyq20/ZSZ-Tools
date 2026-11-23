@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.52",
+  "version": "0.4.53",
   "private": true,
   "main": "bootstrap.cjs",
   "scripts": {
@@ -139,7 +139,8 @@
         "filter": [
           "bridge.py",
           "return_report.py",
-          "report-query.json"
+          "report-query.json",
+          "excluded-codes.json"
         ]
       },
       {
