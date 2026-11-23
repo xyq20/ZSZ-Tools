@@ -93,10 +93,24 @@ function setupBusiness(win,app){
  const erpStockRules=require('./erp-stock-rules.cjs').createErpStockRulesTool({
   app,win,dialog,shell:require('electron').shell,
   getCookies:async url=>{await loginReady;return sessions.monthly.cookies.get({url});},
-  progress:message=>progress('erp-stock-rules',message)
+  progress:message=>progress('erp-stock-rules',message),
+  notifySchedule:schedule=>progress('erp-stock-rules',schedule.message||'',{schedule})
  });
- for(const action of ['list','preview','upload','reveal'])
-  handle('business-erp-stock-rules-'+action,(...args)=>exclusive(()=>erpStockRules[action](...args)));
+ for(const [action,method] of [['list','list'],['preview','preview'],['upload','upload'],['reveal','reveal'],
+  ['schedule-save','saveSchedule'],['schedule-interval','updateScheduleInterval']])
+  handle('business-erp-stock-rules-'+action,(...args)=>exclusive(()=>erpStockRules[method](...args)));
+ handle('business-erp-stock-rules-schedule-cancel',erpStockRules.cancelSchedule);
+ registerReadOnly({ipcMain,win,redact},'business-erp-stock-rules-schedule-status',erpStockRules.scheduleStatus);
+ const stockScheduleContext={tool:'erp-stock-rules',action:'erp-stock-rules-scheduled'};
+ const stockScheduleTimer=setInterval(()=>{
+  if(busy||updateLocked||!erpStockRules.scheduleDue())return;
+  void exclusive(erpStockRules.runScheduled,stockScheduleContext).catch(error=>{
+   activity.record({...stockScheduleContext,ok:false,error:error.message});
+   progress('erp-stock-rules','定时记录无法保存，上传已停止。');
+  });
+ },1000);
+ stockScheduleTimer.unref();
+ win.once('closed',()=>clearInterval(stockScheduleTimer));
  const taobao=require('./taobao.cjs').createTaobaoTool({app,win,dialog,safeStorage,progress:message=>progress('taobao',message)});
  for(const [action,method] of [['taobao-settings','settings'],['taobao-save-key','saveKey'],['taobao-login','login'],['taobao-choose','choose'],['taobao-prepare','prepare'],['taobao-publish','publish'],['taobao-history','history']])handle('business-'+action,(...args)=>exclusive(()=>taobao[method](...args)));
  const reminders=require('./taobao-reminders.cjs').createTaobaoReminders({

@@ -27,7 +27,7 @@ checkpoint(r,state,book,products)
   const business=require(path.join(project,'business/desktop.cjs')).setupBusiness(win,app);await win.loadFile(path.join(project,'app/index.html'));
   const evaluate=s=>win.webContents.executeJavaScript(s,true);
   const wait=async s=>{for(let i=0;i<300;i++){if(await evaluate(s))return;await new Promise(r=>setTimeout(r,100));}throw Error('UI timed out: '+await evaluate("document.getElementById('sycm-progress').textContent"));};
-  await evaluate("document.querySelector('aside [data-view=sycm]').click()");
+  await evaluate("document.querySelector('#home [data-view=sycm]').click()");
   assert.equal(await evaluate("document.getElementById('sycm-start').disabled"),true);
   await evaluate("document.getElementById('sycm-choose').click()");await wait("!document.getElementById('sycm-start').disabled");
   await evaluate("document.getElementById('sycm-resume').click()");

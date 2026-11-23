@@ -20,12 +20,22 @@ async function check() {
     });`);
   await fs.writeFile(main,`const {app,BrowserWindow,ipcMain}=require('electron');
     app.setPath('userData',${JSON.stringify(dir)});
-    const rules=${JSON.stringify(rules)}; global.selections=[];
-    ipcMain.handle('fixture',(_event,id,numbers)=>{
+    const rules=${JSON.stringify(rules)}; global.selections=[]; global.scheduled=null;
+    ipcMain.handle('fixture',(_event,id,numbers,count,unit)=>{
       let data=null;
-      if(id==='ops-snapshot')data={logins:[],activity:[],errors:[],tools:{},runtime:{}};
+      if(id==='ops-snapshot')data={logins:[],activity:[],errors:[],tools:{taobao:{records:{unknown:1}}},runtime:{}};
       if(id==='erp-stock-rules-list')data=rules;
       if(id==='erp-stock-rules-preview'){global.selections.push(numbers);data={complete:true,rows:numbers.map(number=>({number,status:'已核对并取消'}))};}
+      if(id==='erp-stock-rules-schedule-status')data=global.scheduled;
+      if(id==='erp-stock-rules-schedule-save'){
+        global.scheduled={state:'pending',count:Number(count),unit,nextAt:Date.now()+30000,rules:numbers.map(number=>rules[number-1])};data=global.scheduled;
+      }
+      if(id==='erp-stock-rules-schedule-interval'){
+        global.scheduled={...global.scheduled,count:Number(numbers),unit:count,nextAt:Date.now()+45000};data=global.scheduled;
+      }
+      if(id==='erp-stock-rules-schedule-cancel'){
+        global.scheduled={...global.scheduled,state:'cancelled'};data=global.scheduled;
+      }
       return {ok:true,data};
     });
     app.whenReady().then(()=>{global.win=new BrowserWindow({show:false,width:1280,height:820,webPreferences:{preload:${JSON.stringify(preload)}}});global.win.loadFile(${JSON.stringify(path.join(project,'app/index.html'))});});`);
@@ -36,19 +46,64 @@ async function check() {
     desktop=await _electron.launch({executablePath:require('electron'),args:[main],env});
     const page=await desktop.firstWindow();
     page.setDefaultTimeout(8000);
+    const pageErrors=[];
+    page.on('pageerror',error=>pageErrors.push(error.message));
     assert.equal(await page.locator('#home-title').textContent(),'项目总览');
-    assert.equal(await page.locator('aside .nav-tool').count(),10);
-    await page.locator('[data-owner-filter="谭"]').click();
-    assert.equal(await page.locator('#home article:visible').count(),3);
-    for(const link of await page.locator('aside .nav-tool').all()){
-      const id=await link.getAttribute('data-view');
-      await link.click();
-      assert(await page.locator('#'+id).isVisible());
+    const overview=page.locator('.overview-link');
+    const people=page.locator('#people-nav .person-link');
+    const tanNav=page.getByRole('button',{name:'谭',exact:true});
+    const projects=page.locator('.project-link:visible');
+    const projectSearch=page.locator('#search');
+    assert.equal(await overview.locator('.nav-count').textContent(),'10');
+    assert.deepEqual(await page.locator('.person-heading h2').allTextContents(),['丹姐','三公','双姐','谭','董卓','小林']);
+    assert.deepEqual(await page.locator('.person-count').allTextContents(),['1 项','2 项','2 项','3 项','1 项','1 项']);
+    assert.equal(await people.count(),6);
+    for(const size of [{width:1280,height:820},{width:1000,height:650}]){
+      await page.setViewportSize(size);
+      assert.equal(await projects.count(),10);
+      const layout=await page.evaluate(()=>({
+        lastRow:Math.max(...[...document.querySelectorAll('.project-link')].map(row=>row.getBoundingClientRect().bottom)),
+        footerTop:document.querySelector('main .status').getBoundingClientRect().top,
+        scrolls:document.documentElement.scrollWidth>innerWidth ||
+          document.documentElement.scrollHeight>innerHeight,
+      }));
+      assert(layout.lastRow<=layout.footerTop && !layout.scrolls,
+        'All projects should fit at '+size.width+'×'+size.height+' '+JSON.stringify(layout));
     }
+    await tanNav.click();
+    assert.equal(await tanNav.getAttribute('aria-current'),'page');
+    assert.equal(await projects.count(),3);
+    assert.equal(await page.locator('.project-group:visible h2').textContent(),'谭');
+    await projectSearch.fill('ＥＲＰ 库存');
+    assert.equal(await projects.count(),1);
+    await projectSearch.fill('无此项目');
+    assert(await page.locator('#empty').isVisible());
+    await page.locator('#reset-filters').click();
+    assert.equal(await projects.count(),3);
+    assert(await projectSearch.evaluate(input=>input===document.activeElement));
+    await overview.click();
+    await projectSearch.fill('三公');
+    assert.equal(await projects.count(),2);
+    await projectSearch.fill('销售月报');
+    assert.equal(await projects.first().getAttribute('data-view'),'report');
+    await page.locator('#reset-filters').click();
+    for(const link of await projects.all()){
+      const id=await link.getAttribute('data-view');
+      await link.focus();
+      await link.press('Enter');
+      assert(await page.locator('#'+id).isVisible());
+      assert(await page.locator('#'+id+' h1').evaluate(heading=>heading===document.activeElement));
+      await overview.click();
+    }
+    await page.locator('aside [data-view="ops"]').click();
+    await page.locator('#ops-task-detail').getByRole('heading',{name:'淘宝素材上传'}).waitFor();
+    await page.locator('#ops-task-detail [data-view="taobao"]').click();
+    assert(await page.locator('#taobao-history').evaluate(button=>button===document.activeElement));
     await page.locator('aside [data-view="ops"]').click();
     await page.locator('[data-ops-view="machine"]').click();
     assert(await page.locator('#ops-summary').isVisible());
-    await page.locator('aside [data-view=erp-stock-rules]').click();
+    await tanNav.click();
+    await page.locator('#home [data-view="erp-stock-rules"]').click();
     await page.getByRole('button',{name:'读取规则',exact:true}).click();
     const search=page.getByRole('textbox',{name:'搜索规则'}).or(page.getByRole('searchbox',{name:'搜索规则'}));
     await search.waitFor();
@@ -71,7 +126,30 @@ async function check() {
     assert(await first.nth(1).isChecked());
     assert(await first.nth(2).isDisabled());
     assert(await first.nth(3).isChecked());
-    console.log('项目总览与库存规则通过：名称、全半角、编号、无结果、跨筛选勾选、预检回读。');
+    const schedule=page.getByRole('button',{name:'启用循环上传',exact:true});
+    const updateInterval=page.getByRole('button',{name:'更新间隔',exact:true});
+    const cancel=page.getByRole('button',{name:'停止循环',exact:true});
+    const interval=page.getByLabel('循环间隔');
+    assert.equal(await interval.inputValue(),'30');
+    assert.equal(await page.getByLabel('间隔单位').inputValue(),'minutes');
+    assert(await schedule.isEnabled());
+    await interval.fill('');
+    assert(await schedule.isDisabled());
+    await interval.fill('30');
+    await page.getByLabel('间隔单位').selectOption('seconds');
+    assert(await schedule.isEnabled());
+    await schedule.click();
+    await page.locator('#erp-stock-rules-schedule-status').getByText(/间隔 30 秒.*等待下一轮.*下次北京时间/).waitFor();
+    assert.deepEqual(await desktop.evaluate(()=>global.scheduled.rules.map(rule=>rule.number)),[2,4]);
+    assert(await updateInterval.isDisabled());
+    await interval.fill('45');
+    await updateInterval.click();
+    await page.locator('#erp-stock-rules-schedule-status').getByText(/间隔 45 秒/).waitFor();
+    await cancel.click();
+    await page.locator('#erp-stock-rules-schedule-status').getByText(/已停止/).waitFor();
+    assert(await cancel.isHidden());
+    assert.deepEqual(pageErrors,[]);
+    console.log('项目总览与库存规则通过：双窗口尺寸、项目导航、筛选、跨筛选勾选、预检、启用循环、调整间隔和停止循环。');
   } finally {
     if(desktop) await desktop.close();
     await fs.rm(dir,{recursive:true,force:true});

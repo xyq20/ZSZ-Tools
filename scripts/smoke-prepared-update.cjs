@@ -144,7 +144,7 @@ async function verify(){
   console.log('Application is preparing the payload');
   assert(await page.locator('#install-update').isHidden());
   await page.locator('#close-update').click();
-  await page.locator('aside [data-view="report"]').click();assert(await page.locator('#report').isVisible());
+  await page.locator('aside [data-view="report"], #home [data-view="report"]').first().click();assert(await page.locator('#report').isVisible());
   await page.locator('#check-update').click();
   await page.locator('#install-update').waitFor({timeout:240000});
   await fs.writeFile(path.join(data,'qa-preserve-setting'),'preserve');
@@ -169,7 +169,7 @@ async function verify(){
   const relaunched=spawn(executable,['--remote-debugging-port='+nextPort],{detached:true,stdio:'ignore'});relaunched.unref();
   const stable=await pageAt(nextPort);browser=stable.browser;
   assert((await stable.page.locator('#app-version').innerText()).includes('v'+version),'original application entry opened the previous version');
-  await stable.page.locator('aside [data-view="price"]').click();assert(await stable.page.locator('#price').isVisible());
+  await stable.page.locator('aside [data-view="price"], #home [data-view="price"]').first().click();assert(await stable.page.locator('#price').isVisible());
   console.log('Original desktop entry reopened the updated interactive application.');
  }catch(error){
   if(browser){const page=browser.contexts()[0]?.pages()[0];if(page)console.error('Update UI:',await page.locator('#update-status').textContent({timeout:1600}).catch(()=>''));}

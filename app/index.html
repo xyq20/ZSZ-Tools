@@ -2,125 +2,108 @@
   <div class="sidebar-brand"><h2><i aria-hidden="true">▦</i> 钊叔工具箱</h2><small>TEAM TOOLKIT</small></div>
   <nav aria-label="工作空间">
     <div class="nav-label">工作空间</div>
-    <button data-view="home" class="active overview-link" aria-current="page"><span aria-hidden="true">▦</span> 项目总览 <span class="nav-count">6</span></button>
-    <div class="nav-label">按使用人</div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><strong>丹姐</strong></div><button data-view="report" class="nav-tool"><span>销售月报</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><strong>三公</strong></div><button data-view="price" class="nav-tool"><span>批量导入价格</span></button><button data-view="taobao-stock" class="nav-tool"><span>自动库存填写</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-monthly" aria-hidden="true">双</span><strong>双姐</strong></div><button data-view="monthly" class="nav-tool"><span>分级总表</span></button><button data-view="return-rate" class="nav-tool"><span>退货率报表</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><strong>谭</strong></div><button data-view="taobao" class="nav-tool"><span>淘宝素材上传</span></button><button data-view="erp-stock-rules" class="nav-tool"><span>库存规则批量上传</span></button><button data-view="taobao-reminders" class="nav-tool"><span>淘宝商品提醒</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-sycm" aria-hidden="true">董</span><strong>董卓</strong></div><button data-view="sycm" class="nav-tool"><span>生意参谋数据抓取</span></button></div>
-    <div class="nav-owner-group"><div class="nav-owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">林</span><strong>小林</strong></div><button data-view="taobao-soutu" class="nav-tool"><span>千牛搜推素材</span></button></div>
+    <button type="button" data-view="home" data-person="all" class="active overview-link" aria-current="page"><span aria-hidden="true">▦</span> 项目总览 <span class="nav-count" aria-hidden="true"></span></button>
+    <div class="nav-label" id="people-label">按使用人</div>
+    <div id="people-nav" role="group" aria-labelledby="people-label"></div>
   </nav>
-  <div class="bottom">共享工作台<p>所有同事使用同一工具库</p><button data-view="ops">本机诊断</button><small id="app-version">桌面版</small><button id="check-update">↻　检查更新</button></div>
+  <div class="bottom"><button data-view="ops">本机诊断</button><button id="check-update">检查更新</button><small id="app-version">桌面版</small></div>
 </aside>
 <main>
   <header>工作空间 / <span id="crumb">项目总览</span><span class="version">本地桌面工具</span></header>
   <section id="home" aria-labelledby="home-title">
-    <div class="home-heading"><div><h1 id="home-title">项目总览</h1><p>按使用人整理，快速找到你的工具。</p></div><span class="overview-total">6 位同事 <span aria-hidden="true">/</span> 10 个项目</span></div>
+    <div class="home-heading">
+      <h1 id="home-title">项目总览</h1>
+      <span id="result-count" role="status"></span>
+    </div>
     <div class="home-toolbar">
-      <div class="owner-filters" role="group" aria-label="按使用人筛选">
-        <button data-owner-filter="all" aria-pressed="true">全部 <span>6</span></button>
-        <button data-owner-filter="丹姐" aria-pressed="false">丹姐</button>
-        <button data-owner-filter="三公" aria-pressed="false">三公</button>
-        <button data-owner-filter="双姐" aria-pressed="false">双姐</button>
-        <button data-owner-filter="谭" aria-pressed="false">谭</button>
-        <button data-owner-filter="董卓" aria-pressed="false">董卓</button>
-        <button data-owner-filter="小林" aria-pressed="false">小林</button>
-      </div>
-      <input id="search" type="search" placeholder="搜索人名、工具或用途" aria-label="搜索人名、工具或用途">
+      <input id="search" type="search" placeholder="搜索项目、使用人或关键词" aria-label="搜索项目、使用人或关键词">
+      <button id="reset-filters" type="button" hidden>清除搜索</button>
     </div>
-    <div class="overview-caption"><span>人员与项目</span><span id="result-count" role="status" aria-live="polite">共 10 个项目</span></div>
-    <div class="owner-groups">
-      <div class="owner-group" data-owner="丹姐" role="group" aria-labelledby="owner-report">
-        <div class="owner-heading"><span class="person-avatar owner-report" aria-hidden="true">丹</span><h2 id="owner-report">丹姐</h2><span class="owner-count">1 个项目</span></div>
-        <div class="cards">
-          <article data-search="丹姐表格 报表 月报 销售 退款 Excel 导出" aria-labelledby="tool-report">
-            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-report">丹姐表格</h3></div>
-            <p>按指定月份查询销售与退款，导出固定格式月报。</p>
-            <div class="tags">销售月报 · Excel 导出</div>
-            <footer><span>复用本机登录</span><button data-view="report" aria-label="进入丹姐的丹姐表格">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
+    <div class="project-groups">
+      <section class="project-group" data-person="report" aria-labelledby="person-report">
+        <div class="person-heading">
+          <span class="person-avatar" aria-hidden="true">丹</span><h2 id="person-report">丹姐</h2><span class="person-count"></span>
         </div>
-      </div>
-      <div class="owner-group" data-owner="三公" role="group" aria-labelledby="owner-price">
-        <div class="owner-heading"><span class="person-avatar owner-price" aria-hidden="true">三</span><h2 id="owner-price">三公</h2><span class="owner-count">2 个项目</span></div>
-        <div class="cards">
-          <article data-search="三公 价格 Excel 批量 商品 核对 公式" aria-labelledby="tool-price">
-            <div class="card-heading"><i aria-hidden="true">◇</i><h3 id="tool-price">批量导入价格</h3></div>
-            <p>查询并核对空白价格，保留已有价格与公式。</p>
-            <div class="tags">商品价格 · 批量核对</div>
-            <footer><span>复用本机登录</span><button data-view="price" aria-label="进入三公的批量导入价格">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
-          <article data-search="三公 自动库存填写 淘宝 千牛 库存 SKU Excel 二店" aria-labelledby="tool-taobao-stock">
-            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-taobao-stock">自动库存填写</h3></div>
-            <p>按库存表匹配二店商品，核验 SKU 库存后同步上下架状态。</p>
-            <div class="tags">Excel 匹配 · 库存核验 · 断点续跑</div>
-            <footer><span>本机独立二店登录</span><button data-view="taobao-stock" aria-label="进入三公的自动库存填写">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
+        <ul class="project-list">
+          <li><button type="button" class="project-link" data-view="report" data-keywords="快麦 ERP 报表 销售月报 Excel">
+            <strong class="project-title">丹姐表格</strong>
+            <span class="project-description">查询销售与退款，导出月报</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+        </ul>
+      </section>
+      <section class="project-group" data-person="price" aria-labelledby="person-price">
+        <div class="person-heading">
+          <span class="person-avatar" aria-hidden="true">三</span><h2 id="person-price">三公</h2><span class="person-count"></span>
         </div>
-      </div>
-      <div class="owner-group" data-owner="双姐" role="group" aria-labelledby="owner-monthly">
-        <div class="owner-heading"><span class="person-avatar owner-monthly" aria-hidden="true">双</span><h2 id="owner-monthly">双姐</h2><span class="owner-count">2 个项目</span></div>
-        <div class="cards">
-          <article data-search="双姐 总表 分级总表 实发 退货率 月度 Excel" aria-labelledby="tool-monthly">
-            <div class="card-heading"><i aria-hidden="true">▥</i><h3 id="tool-monthly">分级总表</h3></div>
-            <p>按月更新实发数量与三类退货率，保留历史数据。</p>
-            <div class="tags">实发数量 · 退货率 · 月份滚动</div>
-            <footer><span>复用本机 ERP 登录</span><button data-view="monthly" aria-label="进入双姐的分级总表">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
-          <article data-search="双姐 快麦 ERP 退货率 退款 付款月份 淘宝 除淘宝 Excel" aria-labelledby="tool-return-rate">
-            <div class="card-heading"><i aria-hidden="true">%</i><h3 id="tool-return-rate">退货率报表</h3></div>
-            <p>按付款月份选款，导出淘宝、除淘宝和全店的退款数量及退货率。</p>
-            <footer><span>Excel 报表</span><button data-view="return-rate" aria-label="进入双姐的退货率报表">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
+        <ul class="project-list">
+          <li><button type="button" class="project-link" data-view="price" data-keywords="快麦通 Excel 批量 商品 核对 公式">
+            <strong class="project-title">批量导入价格</strong>
+            <span class="project-description">查询并补填表格中的空白价格</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+          <li><button type="button" class="project-link" data-view="taobao-stock" data-keywords="淘宝 千牛 库存 SKU Excel 核验 断点续跑">
+            <strong class="project-title">自动库存填写</strong>
+            <span class="project-description">同步二店 SKU 库存和上下架状态</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+        </ul>
+      </section>
+      <section class="project-group" data-person="monthly" aria-labelledby="person-monthly">
+        <div class="person-heading">
+          <span class="person-avatar" aria-hidden="true">双</span><h2 id="person-monthly">双姐</h2><span class="person-count"></span>
         </div>
-      </div>
-      <div class="owner-group" data-owner="谭" role="group" aria-labelledby="owner-taobao">
-        <div class="owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">谭</span><h2 id="owner-taobao">谭</h2><span class="owner-count">3 个项目</span></div>
-        <div class="cards">
-          <article data-search="谭 快麦 ERP 库存规则批量上传" aria-labelledby="tool-erp-stock-rules">
-            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-erp-stock-rules">库存规则批量上传</h3></div>
-            <p>按名称或编号筛选快麦库存规则，核对后逐条提交。</p>
-            <div class="tags">快麦 ERP · 库存规则</div>
-            <footer><span>更新快麦线上库存</span><button data-view="erp-stock-rules">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
-          <article data-search="谭 淘宝 千牛 视频 素材 上传 发布 商品 文案 话题" aria-labelledby="tool-taobao">
-            <div class="card-heading"><i aria-hidden="true">▷</i><h3 id="tool-taobao">淘宝素材上传</h3></div>
-            <p>上传视频、生成文案与话题，整批核对后发布。</p>
-            <div class="tags">商品匹配 · 实时话题 · 发布核验</div>
-            <footer><span>本机独立淘宝登录</span><button data-view="taobao" aria-label="进入谭的淘宝素材上传">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
-          <article data-search="谭 淘宝 千牛 商品 创建 7天 15天 飞书 机器人 定时 提醒" aria-labelledby="tool-taobao-reminders">
-            <div class="card-heading"><i aria-hidden="true">◇</i><h3 id="tool-taobao-reminders">淘宝商品提醒</h3></div>
-            <p>按千牛商品创建时间，满 7 天和满 15 天各发一次飞书提醒。</p>
-            <footer><span>本机巡检</span><button data-view="taobao-reminders" aria-label="进入谭的淘宝商品提醒">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
+        <ul class="project-list">
+          <li><button type="button" class="project-link" data-view="monthly" data-keywords="快麦 ERP 总表 实发 退货率 月度 Excel">
+            <strong class="project-title">分级总表</strong>
+            <span class="project-description">按月更新实发数量与三类退货率</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+          <li><button type="button" class="project-link" data-view="return-rate" data-keywords="快麦 ERP 退款 付款月份 淘宝 除淘宝 Excel 导出">
+            <strong class="project-title">退货率报表</strong>
+            <span class="project-description">按付款月统计退款数量与退货率</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+        </ul>
+      </section>
+      <section class="project-group" data-person="tan" aria-labelledby="person-tan">
+        <div class="person-heading">
+          <span class="person-avatar" aria-hidden="true">谭</span><h2 id="person-tan">谭</h2><span class="person-count"></span>
         </div>
-      </div>
-      <div class="owner-group" data-owner="董卓" role="group" aria-labelledby="owner-sycm">
-        <div class="owner-heading"><span class="person-avatar owner-sycm" aria-hidden="true">董</span><h2 id="owner-sycm">董卓</h2><span class="owner-count">1 个项目</span></div>
-        <div class="cards">
-          <article data-search="董卓 生意参谋 抓取 流量 主图 曲线 总表 Excel 副本" aria-labelledby="tool-sycm">
-            <div class="card-heading"><i aria-hidden="true">▧</i><h3 id="tool-sycm">生意参谋数据抓取</h3></div>
-            <p>刷新曲线、流量和主图分析，支持中断后继续。</p>
-            <div class="tags">全量刷新 · 断点续跑 · Excel 副本</div>
-            <footer><span>独立生意参谋登录</span><button data-view="sycm" aria-label="进入董卓的生意参谋数据抓取">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
+        <ul class="project-list">
+          <li><button type="button" class="project-link" data-view="taobao" data-keywords="千牛 商品 文案 话题 匹配 发布核验">
+            <strong class="project-title">淘宝素材上传</strong>
+            <span class="project-description">上传短视频，核对后批量发布</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+          <li><button type="button" class="project-link" data-view="erp-stock-rules" data-keywords="快麦 ERP 库存规则 优先级 预检">
+            <strong class="project-title">库存规则批量上传</strong>
+            <span class="project-description">核对快麦库存规则并逐条提交</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+          <li><button type="button" class="project-link" data-view="taobao-reminders" data-keywords="千牛 商品 创建 7天 15天 飞书 机器人 定时 巡检">
+            <strong class="project-title">淘宝商品提醒</strong>
+            <span class="project-description">商品满 7 天、15 天时发飞书提醒</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+        </ul>
+      </section>
+      <section class="project-group" data-person="sycm" aria-labelledby="person-sycm">
+        <div class="person-heading">
+          <span class="person-avatar" aria-hidden="true">董</span><h2 id="person-sycm">董卓</h2><span class="person-count"></span>
         </div>
-      </div>
-      <div class="owner-group" data-owner="小林" role="group" aria-labelledby="owner-soutu">
-        <div class="owner-heading"><span class="person-avatar owner-taobao" aria-hidden="true">林</span><h2 id="owner-soutu">小林</h2><span class="owner-count">1 个项目</span></div>
-        <div class="cards">
-          <article data-search="小林 千牛 淘宝 搜推素材 图文 共享盘 归档" aria-labelledby="tool-soutu">
-            <div class="card-heading"><i aria-hidden="true">▤</i><h3 id="tool-soutu">千牛搜推素材</h3></div>
-            <p>从共享盘选择款式，核对商品后发布图文，确认完成后归档。</p>
-            <div class="tags">搜推图文 · 分组发布</div>
-            <footer><span>复用本机千牛登录</span><button data-view="taobao-soutu" aria-label="进入小林的千牛搜推素材">进入工具 <span aria-hidden="true">→</span></button></footer>
-          </article>
+        <ul class="project-list">
+          <li><button type="button" class="project-link" data-view="sycm" data-keywords="淘宝 抓取 总表 Excel 副本 断点续跑">
+            <strong class="project-title">生意参谋数据抓取</strong>
+            <span class="project-description">刷新曲线、流量和主图分析</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+        </ul>
+      </section>
+      <section class="project-group" data-person="soutu" aria-labelledby="person-soutu">
+        <div class="person-heading">
+          <span class="person-avatar" aria-hidden="true">林</span><h2 id="person-soutu">小林</h2><span class="person-count"></span>
         </div>
-      </div>
+        <ul class="project-list">
+          <li><button type="button" class="project-link" data-view="taobao-soutu" data-keywords="淘宝 共享盘 款式 整款 归档">
+            <strong class="project-title">千牛搜推素材</strong>
+            <span class="project-description">核对商品，分组发布搜推图文</span><span class="project-arrow" aria-hidden="true">›</span>
+          </button></li>
+        </ul>
+      </section>
     </div>
-    <div id="empty" hidden><strong>没有找到对应项目</strong><p>试试其他人名、工具名称或用途。</p><button id="reset-filters">显示全部项目</button></div>
+    <div id="empty" hidden><strong>没有找到匹配的项目</strong><p>试试其他关键词，或切换使用人。</p></div>
   </section>
 <section id="report" hidden><h1>丹姐表格</h1><p>14 家指定店铺 · 订单按创建时间，退款按付款时间归属。</p><div class="toolbar"><button data-login="report">登录快麦 ERP</button></div><div class="form"><label>开始月份<input type="month" id="start"></label><label>结束月份<input type="month" id="end"></label><button id="report-query" data-job>查询最新数据</button><button id="report-export" data-job disabled>导出表格</button></div><p id="report-progress" role="status">登录记录保留在本机，首次使用或失效时再登录。当前月份统计至查询时刻。</p><div id="report-results" class="result-table"></div></section><section id="price" hidden><h1>批量导入价格（三公）</h1><p>选择工作簿 → 查询空白价格 → 核对 → 备份并填入</p><div class="toolbar"><button data-login="price">登录快麦通</button><button id="choose" data-job>选择本机 Excel</button><button id="price-query" data-job disabled>查询空白价格</button><button id="price-export" data-job disabled>导出核对明细</button><button id="price-save" data-job disabled>确认回填</button></div><p id="book">未选择工作簿</p><p id="price-progress" role="status">只查询价格列为空的行；已有内容（包括 0）与公式跳过。核对后仅填入有效且一致的淘宝 SKU 价格。</p><div id="price-results" class="result-table"></div></section><section id="monthly" hidden><h1>总表（双姐）</h1><p>自动按每月 1 日、15 日规则更新实发数量与三类退货率，保留图片与历史月份。</p><div class="monthly-help"><details><summary>逻辑说明</summary><ul><li><strong>1—14 日：</strong>统计上月实发，退货率取上上月 15 日至上月 15 日。</li><li><strong>15 日起：</strong>统计本月 1—14 日实发，退货率取上月整月。</li><li>三类退货率分别计算，各自销量不足 50 件时留空。</li><li>文件按运行月份命名，保存前自动校验和备份，保留图片与历史数据。</li></ul></details><details><summary>使用说明</summary><ol><li>登录快麦，关闭 Excel/WPS 中的总表。</li><li>选择总表和运行日期，点击“查询并预览”。</li><li>核对结果，有疑问可导出明细。</li><li>点击“备份并更新总表”，提示“总表已更新”即完成。</li></ol></details></div><div class="toolbar"><button data-login="monthly">登录快麦 ERP</button><button id="monthly-choose" data-job>选择分级总表</button></div><div class="form"><label>运行日期<input type="date" id="monthly-date" data-job></label><button id="monthly-preview" data-job disabled>查询并预览</button><button id="monthly-save" data-job disabled>备份并更新总表</button><button id="monthly-export" data-job disabled>导出核对明细</button><button id="monthly-reports" data-job disabled>打开报告文件夹</button></div><p id="monthly-book">未选择总表</p><div class="notice" id="monthly-cycle">选择总表后显示本次实发与退货率日期范围。运行日期默认为今天。</div><p id="monthly-progress" role="status">选择总表 → 查询并预览 → 核对结果 → 备份并更新。关键货号未通过校验时保留原表。</p><div id="monthly-results" class="result-table"></div></section><section id="taobao" hidden><h1>淘宝素材上传（谭）</h1><p>选择具体月份 / 周次目录 → 上传并生成 → 核对整批 → 确认发布</p><div class="notice">首次使用需安装 Chrome 或 Edge，并在独立浏览器窗口登录目标淘宝店铺。文案依据商品名称和视频文件名生成，请结合视频画面核对后发布。</div><details><summary>DeepSeek 模型配置</summary><div class="form"><label>API 密钥<input id="taobao-key" type="password" autocomplete="off" placeholder="仅加密保存在本机" data-job></label><button id="taobao-save-key" data-job>保存密钥</button><button id="taobao-settings" data-job>检查配置</button></div><p id="taobao-config-status">使用 DeepSeek 官方 API · deepseek-flash</p></details><div class="toolbar"><button id="taobao-login" data-job>打开淘宝 / 登录</button><button id="taobao-choose" data-job>选择视频目录</button><button id="taobao-prepare" data-job disabled>上传、生成并核验</button><button id="taobao-publish" data-job disabled>确认发布</button><button id="taobao-history" data-job>查看发布记录</button></div><p id="taobao-folder">未选择视频目录。请选择具体周次，最多 100 个 MP4 视频。</p><p id="taobao-progress" role="status" aria-live="polite">跳过文件名带“已传 / 已发布”的素材；内容相同的视频以及已提交或结果待核实的视频会拦截。</p><div id="taobao-results" class="result-table"></div></section>
 <section id="return-rate" hidden aria-labelledby="return-rate-title">
@@ -240,6 +223,18 @@
     <button id="erp-stock-rules-upload" data-job disabled>上传所选库存</button>
     <button id="erp-stock-rules-reveal" data-job disabled>显示清单文件</button>
   </div>
+  <div class="rule-filter">
+    <label>循环间隔<input id="erp-stock-rules-schedule-count" type="number" min="1" step="1" value="30" data-job></label>
+    <select id="erp-stock-rules-schedule-unit" aria-label="间隔单位" data-job>
+      <option value="seconds">秒</option><option value="minutes" selected>分钟</option><option value="hours">小时</option>
+    </select>
+    <button id="erp-stock-rules-schedule-save" type="button" data-job disabled>启用循环上传</button>
+    <button id="erp-stock-rules-schedule-interval" type="button" data-job hidden disabled>更新间隔</button>
+    <button id="erp-stock-rules-schedule-cancel" type="button" hidden disabled>停止循环</button>
+  </div>
+  <p class="hint">按设定间隔启动一轮，每轮上传全部勾选的规则。上一轮仍在执行时跳过重叠轮次。请保持电脑唤醒、工具箱运行及快麦登录。</p>
+  <p id="erp-stock-rules-schedule-status" role="status" hidden></p>
+  <ul id="erp-stock-rules-schedule-rules" hidden></ul>
         <p id="erp-stock-rules-progress" role="status" aria-live="polite"></p>
         <div id="erp-stock-rules-filter" class="rule-filter" hidden>
           <label>搜索规则<input id="erp-stock-rules-search" type="search" placeholder="规则名称或编号" autocomplete="off"></label>

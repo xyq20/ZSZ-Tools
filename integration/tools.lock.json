@@ -310,12 +310,12 @@
     },
     "erp-stock-rules": {
       "source": "../../../Documents/ChatGPT/上传库存规则批量点击（谭）",
-      "commit": "0842b4782dbdc6d994849f5d1b94d7225fedbf96",
+      "commit": "379feae510b87c2a10e22d8378e335baa71ac70c",
       "dirty": false,
       "files": {
         "upload_rules.py": {
           "target": "business/erp-stock-rules-python/upload_rules.py",
-          "sha256": "38b562ff91321f8db5c7adc968d4dcab57c7b1dcd89d89bda5d9510b11d63e51"
+          "sha256": "dec07ef692948aad582773ea486d996f6e4c5ee7094e7b9a60bef744282e3a80"
         },
         "toolbox_bridge.py": {
           "target": "business/erp-stock-rules-python/bridge.py",

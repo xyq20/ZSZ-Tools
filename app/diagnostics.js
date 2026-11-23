@@ -1,8 +1,5 @@
-function setupDiagnostics({request,toast}) {
+function setupDiagnostics({tools,request,toast}) {
   const find = id => document.getElementById(id);
-  const tools = new Map([...document.querySelectorAll('aside .nav-tool')].map(nav=>[
-    nav.dataset.view, {name:nav.textContent,owner:nav.closest('.nav-owner-group').querySelector('strong').textContent},
-  ]));
   const visible=()=>!find('ops').hidden;
   let view = 'attention';
   let selected = '';

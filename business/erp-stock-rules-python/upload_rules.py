@@ -27,6 +27,9 @@ RULES_URL = "https://erpa.superboss.cc" + RULES_ROUTE
 LIST_REQUEST = "/stock/upload/newRule/ruleList"
 UPLOAD_REQUEST = "/stock/upload/newRule/manual"
 CSV_PATH = ROOT / "output" / "全部上传规则.csv"
+# These page cookies rotate when Chrome reopens while the authenticated ERP
+# session remains the same. Chrome still sends them in its normal requests.
+VOLATILE_PAGE_COOKIES = {(".superboss.cc", "_pdd_page_code"), (".superboss.cc", "tfstk")}
 
 
 @dataclass(frozen=True)
@@ -91,15 +94,20 @@ def open_browser(profile=None, announce=print):
                 headless=False,
                 no_viewport=True,
                 ignore_default_args=["--use-mock-keychain", "--password-store=basic"],
-                args=["--start-maximized"],
+                args=["--start-maximized", "--restore-last-session"],
             )
         except Error as exc:
             raise RuntimeError("无法打开快麦专用 Chrome。请检查 Chrome 是否已安装，以及快麦专用窗口是否正被其他任务占用。") from exc
+        page = next((tab for tab in context.pages if tab.url == "about:blank"), None)
+        page = page or context.new_page()
         try:
-            page = next((tab for tab in context.pages if tab.url == "about:blank"), None)
-            yield page or context.new_page()
+            yield page
         finally:
-            context.close()
+            try:
+                if not page.is_closed() and len(context.pages) > 1:
+                    page.close()
+            finally:
+                context.close()
 
 
 def matches_request(response, path):
@@ -257,8 +265,9 @@ def session_fingerprint(page):
     cookies = sorted(
         (item["domain"], item["path"], item["name"], item["value"])
         for item in page.context.cookies(url)
+        if (item["domain"], item["name"]) not in VOLATILE_PAGE_COOKIES
     )
-    return hashlib.sha256(json.dumps(cookies, ensure_ascii=False).encode()).hexdigest()
+    return hashlib.sha256(json.dumps([origin.hostname, cookies], ensure_ascii=False).encode()).hexdigest()
 
 
 def rule_identity(rule):
