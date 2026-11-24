@@ -1,5 +1,8 @@
 const fs = require('node:fs/promises');
-const physical = process.versions.electron ? require('original-fs').promises : fs;
+const physicalStream = process.versions.electron ? require('original-fs') : require('node:fs');
+const physical = physicalStream.promises;
+const {Writable} = require('node:stream');
+const {pipeline} = require('node:stream/promises');
 const path = require('node:path');
 const {execFile, spawn} = require('node:child_process');
 const exec = require('node:util').promisify(execFile);
@@ -50,6 +53,19 @@ async function macPayload({file,directory,executable,version,token,signal}) {
   }
 }
 
+// Windows scans a new program on its first start and first file reads. Do that while preparing,
+// so the restart does not wait for the scan.
+async function warmWindows(staged,resources,signal) {
+  await exec(path.join(staged,EXE),['-e','0'],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},windowsHide:true,timeout:120000,signal}).catch(()=>{});
+  const files=(await fs.readdir(staged,{withFileTypes:true})).filter(entry=>entry.isFile()).map(entry=>path.join(staged,entry.name));
+  files.push(path.join(resources,'app.asar'));
+  for(const file of files){
+    signal.throwIfAborted();
+    await pipeline(physicalStream.createReadStream(file),new Writable({write(chunk,encoding,done){done();}})).catch(()=>{});
+  }
+  signal.throwIfAborted();
+}
+
 async function windowsPayload({file,executable,current,version,token,signal,resources}) {
   const store=await prepareStore(executable,current);
   const previousActive=await readActive(store);
@@ -61,6 +77,7 @@ async function windowsPayload({file,executable,current,version,token,signal,reso
     const next=path.join(staged,'resources');
     const metadata=JSON.parse(await fs.readFile(path.join(next,'app.asar','package.json'),'utf8'));
     if(metadata.name!=='team-toolkit'||metadata.version!==version)throw Error('更新包中的应用身份或版本不匹配');
+    await warmWindows(staged,next,signal);
     // Local defaults belong to this installation; the public payload does not carry them.
     const defaults='taobao-reminders-defaults.json';
     try{await fs.copyFile(path.join(resources,defaults),path.join(next,defaults),require('node:fs').constants.COPYFILE_EXCL);}
@@ -120,4 +137,4 @@ async function launchHot({prepared,executable,directory,token,version,clickedAt}
   }
 }
 
-module.exports={prepareHot,assertPrepared,launchHot};
+module.exports={prepareHot,assertPrepared,launchHot,warmWindows};

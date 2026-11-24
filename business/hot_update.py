@@ -67,6 +67,10 @@ def launch(executable, argument):
                             creationflags=flags, start_new_session=os.name != "nt")
 
 
+def now_ms():
+    return int(time.time() * 1000)
+
+
 def await_parent(pid, ready):
     if os.name == "nt":
         from ctypes import wintypes
@@ -153,9 +157,11 @@ def switch(plan):
         except OSError:
             print(message, file=sys.stderr, flush=True)
 
+    stages = {"helperAt": now_ms()}
     try:
         await_parent(plan["parentPid"], ready)
         parent_exited = True
+        stages["parentExitedAt"] = now_ms()
         if mac:
             target = Path(plan["target"])
             exchange_mac(target, staged)
@@ -166,6 +172,7 @@ def switch(plan):
                 raise RuntimeError("当前版本已发生变化，请重新检查更新")
             candidate = staged / previous.name
         child = launch(candidate, "--toolkit-update-token=" + token)
+        stages["launchedAt"] = now_ms()
         record("启动新版 PID=" + str(child.pid))
         receipt = wait_for_window(directory / ("window-" + token + ".json"), child, plan, candidate)
         if not mac:
@@ -193,11 +200,15 @@ def switch(plan):
         ready.unlink(missing_ok=True)
 
     receipt["elapsedMs"] = receipt["readyAt"] - plan["clickedAt"]
+    receipt["stages"] = stages
     atomic_json(directory / "healthy", receipt)
     pending = directory.parent / "pending.json"
     if (read_json(pending) or {}).get("token") == token:
         pending.unlink(missing_ok=True)
     record("新版主窗口已显示，可操作，用时 %d ms；前台=%s" % (receipt["elapsedMs"], receipt["focused"]))
+    record("分段：点击到助手就绪 %d ms，等待旧版退出 %d ms，切换 %d ms，新版启动到窗口可操作 %d ms" % (
+        stages["helperAt"] - plan["clickedAt"], stages["parentExitedAt"] - stages["helperAt"],
+        stages["launchedAt"] - stages["parentExitedAt"], receipt["readyAt"] - stages["launchedAt"]))
     if mac:
         shutil.rmtree(staged, ignore_errors=True)
     elif previous.parent.parent == staged.parent and previous.parent != staged:
