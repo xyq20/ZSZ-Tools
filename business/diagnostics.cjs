@@ -238,22 +238,21 @@ function registerReadOnly({ipcMain, win, redact = createRedactor()}, name, fn) {
 }
 
 // ---------------------------------------------------------------- diagnostics
-function createDiagnostics({app, safeStorage, sessions = {}, loginReady, reminders, getRunning = () => null, activity,
+function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureLoginReady = () => loginReady, reminders, getRunning = () => null, activity,
   redact, fs = require('node:fs/promises'), os = require('node:os'), proc = process,
   runtimePaths, browserPath, componentsRoot, timeoutMs = 1500, loginWaitMs = 800, stateMaxBytes = STATE_MAX_BYTES} = {}) {
   const clean = typeof redact === 'function' ? redact : createRedactor({home: attempt(() => app.getPath('home'))});
   const io = fileReader(fs);
   const parseCache = new Map();
-  let loginSettled = false;
-  const loginSettledPromise = Promise.resolve(loginReady).then(() => { loginSettled = true; }, () => { loginSettled = true; });
+  let loginSettledPromise;
   const resolveRuntimePaths = () => runtimePaths || require('./monthly.cjs').runtimePaths;
   const resolveBrowserPath = () => browserPath || require('./taobao.cjs').browserPath;
 
   const encryption = () => attempt(() => Boolean(safeStorage.isEncryptionAvailable()), null);
 
   async function loginReadyWithin(ms) {
-    if (loginSettled) return true;
-    return waitUpTo(loginSettledPromise.then(() => true), ms, false);
+    loginSettledPromise ??= Promise.resolve().then(ensureLoginReady).then(() => true, () => true);
+    return waitUpTo(loginSettledPromise, ms, false);
   }
 
   // Only a boolean leaves this function: no cookie names, values or counts.

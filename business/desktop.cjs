@@ -22,9 +22,14 @@ function setupBusiness(win,app){
   if(!win.isDestroyed())win.webContents.send('business-busy',running);
  }
  const loginState=createLoginState({directory:path.join(app.getPath('userData'),'login-state'),sessions:{price:sessions.price,report:sessions.report},encryption:safeStorage,onError:message=>{progress('price',message);progress('report',message);progress('monthly',message);}});
- const loginReady=loginState.restore();
+ // The overview and updater do not need ERP credentials. Opening them must
+ // not wait for a macOS Keychain prompt before the main window is ready.
+ let loginReady = process.platform === 'darwin' ? null : loginState.restore();
+ function ensureLoginReady() {
+  return loginReady ??= loginState.restore();
+ }
  async function request(tool,route,body){
-  await loginReady;
+  await ensureLoginReady();
   await new Promise(r=>setTimeout(r,tool==='price'?150:tool==='monthly'?1800:0));
   if(tool==='monthly'||tool==='report')return requestInErpPage(await loginWindow(tool,false),route,body);
   const origin=origins[tool];
@@ -64,7 +69,7 @@ function setupBusiness(win,app){
   catch(error){activity.record({...context,ok:false,error:error.message});throw error;}
  }
  async function loginWindow(tool,show=true){
-  await loginReady;
+  await ensureLoginReady();
   if(!origins[tool])throw Error('未知工具');if(loginWindows.has(tool)){const existing=loginWindows.get(tool);if(show)restoreWindow(existing);return existing;}
   const w=new BrowserWindow({title:tool==='price'?'登录快麦通':tool==='monthly'?'总表（双姐）· 登录快麦 ERP':'登录快麦 ERP',width:1100,height:780,show,webPreferences:{backgroundThrottling:false,session:sessions[tool],nodeIntegration:false,contextIsolation:true,sandbox:true}});loginWindows.set(tool,w);bindLoginWindow(w,win);
   // Remote login has no preload or desktop IPC access.
@@ -92,7 +97,7 @@ function setupBusiness(win,app){
   handle('business-return-rate-'+action,(...args)=>exclusive(()=>returnRate[method](...args)));
  const erpStockRules=require('./erp-stock-rules.cjs').createErpStockRulesTool({
   app,win,dialog,shell:require('electron').shell,
-  getCookies:async url=>{await loginReady;return sessions.monthly.cookies.get({url});},
+  getCookies:async url=>{await ensureLoginReady();return sessions.monthly.cookies.get({url});},
   progress:message=>progress('erp-stock-rules',message),
   notifySchedule:schedule=>progress('erp-stock-rules',schedule.message||'',{schedule})
  });
@@ -129,10 +134,10 @@ function setupBusiness(win,app){
  for(const [action,method] of [['login','login'],['choose','choose'],['scan','scan'],['plan','plan'],['publish','publish'],['history','history'],['resolve','resolvePending'],['archive','openArchive']])handle('business-taobao-soutu-'+action,(...args)=>exclusive(()=>soutu[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
- const diagnostics=createDiagnostics({app,safeStorage,sessions,loginReady,reminders,getRunning:()=>running,activity,redact});
+ const diagnostics=createDiagnostics({app,safeStorage,sessions,ensureLoginReady,reminders,getRunning:()=>running,activity,redact});
  registerReadOnly({ipcMain,win,redact},'business-ops-snapshot',diagnostics.snapshot);
  registerReadOnly({ipcMain,win,redact},'business-task-state',()=>running);
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});
- return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();await loginReady;await loginState.flush();await monthly.cleanup();await taobao.cleanup();await stock.cleanup();await soutu.cleanup();await activity.flush();},isBusy:()=>busy};
+ return {beginUpdate:()=>{if(busy||updateLocked)throw Error('任务正在执行，请完成后再更新');updateLocked=true;},endUpdate:()=>{updateLocked=false;},flushLogin:async({keepSchedule=false}={})=>{if(!keepSchedule)reminders.stop();if(loginReady){await loginReady;await loginState.flush();}await monthly.cleanup();await taobao.cleanup();await stock.cleanup();await soutu.cleanup();await activity.flush();},isBusy:()=>busy};
 }
 module.exports={setupBusiness};
