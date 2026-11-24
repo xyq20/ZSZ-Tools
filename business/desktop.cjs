@@ -134,7 +134,7 @@ function setupBusiness(win,app){
  const stock=require('./taobao-stock.cjs').createTaobaoStockTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('taobao-stock',message)});
  for(const [action,method] of [['login','login'],['verify-login','verifyLogin'],['choose','choose'],['start','start'],['resume','resume'],['report','openReport']])handle('business-taobao-stock-'+action,(...args)=>exclusive(()=>stock[method](...args)));
  const soutu=require('./taobao-soutu.cjs').createTaobaoSoutuTool({
-  app,win,dialog,shell:require('electron').shell,getModelKey:taobao.getModelKey,
+  app,win,dialog,shell:require('electron').shell,safeStorage,getModelKey:taobao.getModelKey,
   fetchModel:(url,options)=>session.defaultSession.fetch(url,options),
   progress:(message,batch)=>progress('taobao-soutu',message,batch)
  });

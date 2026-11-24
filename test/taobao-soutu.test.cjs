@@ -1,10 +1,76 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { mkdir, mkdtemp, rm } = require('node:fs/promises');
+const { mkdir, mkdtemp, readFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const { createTaobaoSoutuTool } = require('../business/taobao-soutu.cjs');
+
+test('Windows 搜推专用浏览器重开时在首次导航前恢复已加密的千牛会话', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'toolkit-soutu-login-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const cookie = { name: 'fixture-login', value: 'fixture-session', domain: '.taobao.com', path: '/', expires: -1 };
+  const file = path.join(directory, 'taobao-soutu', 'session-cookies.bin');
+  const contexts = [];
+  function createTool() {
+    return createTaobaoSoutuTool({
+      app: { getPath: () => directory },
+      platform: 'win32',
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: value => Buffer.from(Buffer.from(value).toString('base64')),
+        decryptString: bytes => Buffer.from(bytes.toString(), 'base64').toString(),
+      },
+      progress: message => assert.fail(message),
+      findBrowser: () => 'fixture',
+      coreLoader: async () => ({
+        MaterialPage: class {
+          constructor(page) { this.page = page; }
+          async checkAccess() {
+            if (!this.page.url().includes('myseller.taobao.com')) throw Error('会话未登录或已过期');
+          }
+          async enter() {}
+        },
+        async launchBrowser() {
+          let url = 'about:blank';
+          const page = new EventEmitter();
+          const frame = { url: () => url };
+          const cookies = [];
+          const navigate = next => {
+            url = next;
+            page.emit('framenavigated', frame);
+          };
+          page.url = frame.url;
+          page.mainFrame = () => frame;
+          page.isClosed = () => false;
+          page.bringToFront = async () => {};
+          page.goto = async target => navigate(cookies.length ? target : 'https://login.taobao.com');
+          const context = new EventEmitter();
+          context.pages = () => [page];
+          context.cookies = async () => cookies;
+          context.addCookies = async restored => cookies.push(...restored);
+          context.close = async () => context.emit('close');
+          contexts.push({ cookies, navigate, context });
+          return context;
+        },
+      }),
+    });
+  }
+
+  const first = createTool();
+  t.after(() => first.cleanup());
+  assert.match((await first.login()).message, /请在专用浏览器中登录/);
+  contexts[0].cookies.push(cookie);
+  contexts[0].navigate('https://myseller.taobao.com/home.htm');
+  await first.cleanup();
+  assert(!(await readFile(file)).includes(Buffer.from(cookie.value)));
+
+  const restarted = createTool();
+  t.after(() => restarted.cleanup());
+  assert.match((await restarted.login()).message, /素材中心已就绪/);
+  assert.deepEqual(contexts[1].cookies, [cookie]);
+  assert.equal(contexts.length, 2);
+});
 
 test('搜推核对阶段只读，并仅提交再确认且未变动的原分组', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'toolkit-soutu-test-'));
@@ -94,4 +160,37 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
   await assert.rejects(tool.publish(), /提交结果待核对/);
   assert.deepEqual([snapshots.at(-1)?.stage, snapshots.at(-1)?.count], ['pending', 0]);
   await tool.cleanup();
+});
+
+test('Mac 搜推用专用 Chrome 恢复会话，打开和退出均不访问工具箱钥匙串', {
+  skip: process.platform !== 'darwin' || !require('node:fs').existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+}, async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'soutu-chrome-session-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const {launchBrowser} = await import('../modules/taobao-soutu/browser.mjs');
+  const runtime = path.join(directory,'taobao-soutu');
+  await mkdir(runtime);
+  await require('node:fs/promises').writeFile(path.join(runtime,'session-cookies.bin'),'old encrypted fixture');
+  let ctx, accesses=0;
+  for(let n=0;n<2;n++){
+    const tool=createTaobaoSoutuTool({
+      app:{getPath:()=>directory}, platform:'darwin', progress:()=>{},
+      safeStorage:new Proxy({}, {get(){accesses++;throw Error('unexpected Keychain access');}}),
+      findBrowser:()=>'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      coreLoader:async()=>({
+        async launchBrowser(root,config){
+          ctx=await launchBrowser(root,config);
+          await ctx.route('**/*',route=>route.fulfill({body:'fixture'}));
+          return ctx;
+        },
+        MaterialPage:class {constructor(page){this.page=page;} async checkAccess(){} async enter(){}}
+      })
+    });
+    try{
+      await tool.login();
+      if(n===0)await ctx.addCookies([{name:'fixture',value:'test',domain:'localhost',path:'/',expires:-1,httpOnly:true}]);
+      else assert((await ctx.cookies()).some(cookie=>cookie.name==='fixture'&&cookie.expires===-1));
+    }finally{await tool.cleanup();}
+  }
+  assert.equal(accesses,0);
 });

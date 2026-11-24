@@ -33,6 +33,7 @@ export async function launchBrowser(runtime, config) {
   await mkdir(profile, { recursive: true, mode: 0o700 });
   const browser = await chromium.launchPersistentContext(profile, {
     ...(config.executablePath ? { executablePath: config.executablePath } : { channel: config.channel }),
+    ...(config.restorePreviousSession ? {args: ['--restore-last-session']} : {}),
     headless: false,
     viewport: null,
     handleSIGINT: false,
@@ -55,6 +56,10 @@ function visible(locator) {
 async function one(locator) {
   const matches = visible(locator);
   return await matches.count() === 1 ? matches : null;
+}
+
+async function productSearch(frame) {
+  return await one(frame.locator('input#itemIds')) ?? await one(frame.getByPlaceholder(searchName));
 }
 
 export class MaterialPage {
@@ -139,7 +144,7 @@ export class MaterialPage {
 
     const current = await this.waitFor(async () => {
       for (const frame of this.page.frames()) {
-        const search = await one(frame.getByPlaceholder(searchName));
+        const search = await productSearch(frame);
         if (search) return { frame, search };
         const tab = await one(frame.getByText('搜推素材', { exact: true }));
         if (tab) return { frame, tab };
@@ -154,7 +159,7 @@ export class MaterialPage {
     await current.tab.click();
     this.searchSurface = await this.waitFor(async () => {
       for (const frame of this.page.frames()) {
-        const search = await one(frame.getByPlaceholder(searchName));
+        const search = await productSearch(frame);
         if (search) return { frame, search };
       }
       return null;
@@ -340,7 +345,7 @@ export class MaterialPage {
     if (!slots.length) throw new Error('商品行内没有识别到空素材位，请检查剩余坑位或配置 selectors.emptySlot。');
     const menu = visible(frame.getByText('发图文', { exact: true }));
     if (await menu.count()) {
-      const search = await one(frame.getByPlaceholder(searchName));
+      const search = await productSearch(frame);
       if (search) await search.hover({ timeout: 1500 });
       try {
         await menu.first().waitFor({ state: 'hidden', timeout: 750 });

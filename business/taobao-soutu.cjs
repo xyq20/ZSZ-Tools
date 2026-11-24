@@ -1,8 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { browserPath } = require('./taobao.cjs');
+const { createTaobaoLoginState } = require('./taobao-login-state.cjs');
 
 const defaults = require('../modules/taobao-soutu/defaults.json');
+const materialOrigin = new URL(defaults.materialUrl).origin;
 
 let bundle;
 function loadCore() {
@@ -15,8 +17,8 @@ function loadCore() {
   return bundle;
 }
 
-function createTaobaoSoutuTool({ app, win, dialog, shell, progress, getModelKey, fetchModel,
-  coreLoader = loadCore, findBrowser = browserPath }) {
+function createTaobaoSoutuTool({ app, win, dialog, shell, safeStorage, progress, getModelKey, fetchModel,
+  coreLoader = loadCore, findBrowser = browserPath, platform = process.platform }) {
   const runtime = path.join(app.getPath('userData'), 'taobao-soutu');
   const suggested = process.platform === 'win32' ? '\\\\GONGXIANG\\美工文件\\搜推素材' : defaults.source;
   let source;
@@ -24,34 +26,62 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, getModelKey,
   let ready;
   let context;
   let material;
+  let loginState;
 
   const config = () => ({ ...defaults, source });
 
   async function browser() {
     if (context && material && !material.page.isClosed()) return material;
-    const executablePath = findBrowser();
-    if (!executablePath) throw Error('请先安装 Google Chrome 或 Microsoft Edge。');
     const core = await coreLoader();
-    const opened = await core.launchBrowser(runtime, { ...config(), executablePath });
-    context = opened;
-    opened.on('close', () => {
-      if (context === opened) {
-        context = null;
-        material = null;
-        ready = null;
-      }
-    });
+    if (!context) {
+      const executablePath = findBrowser();
+      if (!executablePath) throw Error('请先安装 Google Chrome 或 Microsoft Edge。');
+      const opened = await core.launchBrowser(runtime, { ...config(), executablePath, restorePreviousSession: platform === 'darwin' });
+      const savedLogin = platform !== 'darwin' && safeStorage ? createTaobaoLoginState({
+        context: opened,
+        file: path.join(runtime, 'session-cookies.bin'),
+        encryption: safeStorage,
+        onError: message => progress(message),
+      }) : null;
+      context = opened;
+      loginState = savedLogin;
+      opened.on('close', () => {
+        savedLogin?.stop();
+        if (context === opened) {
+          context = null;
+          material = null;
+          ready = null;
+          loginState = null;
+        }
+      });
+      await savedLogin?.restore();
+      if (context !== opened) throw Error('独立 Chrome 窗口已关闭');
+      savedLogin?.start();
+    }
+    const opened = context;
+    const savedLogin = loginState;
     const page = opened.pages()[0] ?? await opened.newPage();
+    if (savedLogin) {
+      page.on('framenavigated', frame => {
+        if (frame === page.mainFrame() && new URL(frame.url()).origin === materialOrigin) void savedLogin.save();
+      });
+    }
     material = new core.MaterialPage(page, config());
     return material;
   }
 
   async function cleanup() {
     const opened = context;
+    const savedLogin = loginState;
     context = null;
     material = null;
     ready = null;
-    await opened?.close();
+    loginState = null;
+    try {
+      await savedLogin?.flush();
+    } finally {
+      await opened?.close();
+    }
   }
 
   async function scan() {
@@ -72,6 +102,7 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, progress, getModelKey,
     try {
       await page.checkAccess();
       await page.enter();
+      await loginState?.save();
       return { message: '千牛素材中心已就绪，后续操作会复用该会话。' };
     } catch (error) {
       if (!error.message.includes('会话未登录或已过期')) throw error;
