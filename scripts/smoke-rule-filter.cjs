@@ -23,7 +23,11 @@ async function check() {
     const rules=${JSON.stringify(rules)}; global.selections=[]; global.scheduled=null;
     ipcMain.handle('fixture',(_event,id,numbers,count,unit)=>{
       let data=null;
-      if(id==='ops-snapshot')data={logins:[],activity:[],errors:[],tools:{taobao:{records:{unknown:1}}},runtime:{}};
+      if(id==='ops-snapshot')data={generatedAt:'2026-11-24T06:05:00Z',processStartedAt:'2026-11-24T06:00:00Z',
+        logins:[],activity:[],errors:[
+          {id:'fixture-task',at:'2026-11-24T06:03:00Z',tool:'report',action:'report-query',step:'查询月份',ms:240,code:'ETIMEDOUT',message:'请求超时'},
+          {at:'2026-11-23T06:00:00Z',action:'price-save',message:'旧版错误'}],
+        logs:{events:'2026-11-24T06:03:00.000Z · 自动 · 0.4.63 · checking → current · 处理耗时 737 ms',installTarget:'0.4.63',install:'已确认主窗口'},tools:{taobao:{records:{unknown:1}}},runtime:{}};
       if(id==='erp-stock-rules-list')data=rules;
       if(id==='erp-stock-rules-preview'){global.selections.push(numbers);data={complete:true,rows:numbers.map(number=>({number,status:'已核对并取消'}))};}
       if(id==='erp-stock-rules-schedule-status')data=global.scheduled;
@@ -102,6 +106,12 @@ async function check() {
     await page.locator('aside [data-view="ops"]').click();
     await page.locator('[data-ops-view="machine"]').click();
     assert(await page.locator('#ops-summary').isVisible());
+    await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.testSummary=text;}}}));
+    await page.locator('#ops-copy').click();
+    await page.waitForFunction(()=>Boolean(window.testSummary));
+    const summary=await page.evaluate(()=>window.testSummary);
+    assert.match(summary,/本次运行失败[\s\S]*14:03:00[\s\S]*fixture-task[\s\S]*查询月份[\s\S]*ETIMEDOUT[\s\S]*历史失败[\s\S]*旧版错误/);
+    assert.match(summary,/本次运行更新记录[\s\S]*正在检查 → 当前已是最新版本[\s\S]*目标 v0.4.63/);
     await tanNav.click();
     await page.locator('#home [data-view="erp-stock-rules"]').click();
     await page.getByRole('button',{name:'读取规则',exact:true}).click();

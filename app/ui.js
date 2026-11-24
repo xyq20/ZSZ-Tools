@@ -129,7 +129,7 @@ function renderUpdate(r){
  installButton.hidden=r.status!=='downloaded';installButton.disabled=false;
  cancelUpdateButton.hidden=!['downloading','preparing'].includes(r.status);
  cancelUpdateButton.textContent=r.status==='preparing'?'取消准备':'取消下载';
- checkButton.textContent=r.status==='downloaded'?'更新已就绪':r.status==='preparing'?'正在准备新版':r.status==='downloading'?'下载中 '+(r.percent||0)+'%':'检查更新';
+ checkButton.textContent=r.status==='available'?'发现新版 v'+r.latest:r.status==='downloaded'?'更新已就绪':r.status==='preparing'?'正在准备新版':r.status==='downloading'?'下载中 '+(r.percent||0)+'%':'检查更新';
 }
 window.desktop?.onUpdate?.(renderUpdate);
 checkButton.addEventListener('click',async()=>{

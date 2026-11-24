@@ -157,6 +157,8 @@ def switch(plan):
         except OSError:
             print(message, file=sys.stderr, flush=True)
 
+    if plan.get("currentVersion"):
+        record("开始重启更新 v%s → v%s" % (plan["currentVersion"], plan["version"]))
     stages = {"helperAt": now_ms()}
     try:
         await_parent(plan["parentPid"], ready)

@@ -117,30 +117,42 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   let active = false;
   let stopped = false;
 
-  if (app.isPackaged) {
-    const file = path.join(resourcesPath, DEFAULTS_FILE);
-    try {
-      if (fs.existsSync(file)) {
-        defaults = feishuDefaults(JSON.parse(fs.readFileSync(file, 'utf8')));
-      } else if (process.platform === 'darwin') {
-        defaults = macUpgradeDefaults(app, safeStorage, directory);
+  let loaded = false;
+  function loadSettings() {
+    if (loaded) return;
+    loaded = true;
+    if (app.isPackaged) {
+      const file = path.join(resourcesPath, DEFAULTS_FILE);
+      try {
+        if (fs.existsSync(file)) {
+          defaults = feishuDefaults(JSON.parse(fs.readFileSync(file, 'utf8')));
+        } else if (process.platform === 'darwin') {
+          defaults = macUpgradeDefaults(app, safeStorage, directory);
+        }
+        config = {...INITIAL, ...defaults};
+      } catch {
+        configError = '内置飞书配置无法读取，请重新安装内部版或手动保存配置';
       }
-      config = {...INITIAL, ...defaults};
+    }
+    try {
+      if (fs.existsSync(configFile)) {
+        if (!safeStorage.isEncryptionAvailable()) throw Error('无法使用系统加密');
+        config = parseSettings(JSON.parse(safeStorage.decryptString(fs.readFileSync(configFile))), INITIAL, defaults);
+        configError = '';
+      }
     } catch {
-      configError = '内置飞书配置无法读取，请重新安装内部版或手动保存配置';
+      configError = '本机提醒配置无法读取，请重新保存配置';
     }
   }
-  try {
-    if (fs.existsSync(configFile)) {
-      if (!safeStorage.isEncryptionAvailable()) throw Error('无法使用系统加密');
-      config = parseSettings(JSON.parse(safeStorage.decryptString(fs.readFileSync(configFile))), INITIAL, defaults);
-      configError = '';
-    }
-  } catch {
-    configError = '本机提醒配置无法读取，请重新保存配置';
-  }
+  // Existing app-managed schedules need their settings on startup. Encrypted
+  // defaults alone cannot enable a schedule. Preserve upgrade-only migration
+  // while the old bundle is still available.
+  const needsMigration = process.platform === 'darwin' && app.isPackaged &&
+    process.argv.some(arg=>/^--toolkit-update-token=[a-f0-9]{32}$/.test(arg)) &&
+    !fs.existsSync(path.join(directory,'defaults.bin'));
+  if (process.platform !== 'darwin' || (!nativeAgent && fs.existsSync(configFile)) || needsMigration) loadSettings();
 
-  function status() {
+  function peekStatus() {
     let at = config.at;
     let recipient = config.recipient;
     if (nativeAgent) {
@@ -149,12 +161,14 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       recipient = (fs.existsSync(nativeRecipientFile) ? fs.readFileSync(nativeRecipientFile, 'utf8').trim() : '') || defaults.recipient;
     }
     return {
-      enabled: !nativeAgent && config.enabled, at,
+      configDeferred: !loaded, enabled: !nativeAgent && config.enabled, at,
       hasWebhook: nativeAgent ? fs.existsSync(nativeWebhookFile) || Boolean(defaults.webhook) : Boolean(config.webhook),
       recipient, hasLogin: fs.existsSync(authFile), nativeAgent,
       message: configError || lastResult,
     };
   }
+
+  function status() { loadSettings(); return peekStatus(); }
 
   async function execute(script, flags = [], settings) {
     const executable = browserFinder();
@@ -188,8 +202,9 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
   timer.unref();
   const initialTick = setImmediate(() => { void tick(); });
   return {
-    status,
+    peekStatus, status,
     async save(value) {
+      loadSettings();
       const next = parseSettings(value, config, defaults);
       if (next.enabled && nativeAgent) throw Error('此 Mac 已有独立巡检程序，避免开启第二个定时');
       if (nativeAgent) {
@@ -215,6 +230,7 @@ function createTaobaoReminders({app, safeStorage, progress, exclusive, blocked, 
       return {...status(), message};
     },
     async preview() {
+      loadSettings();
       progress('正在查询千牛商品创建时间…');
       const message = await execute('remind.py', ['--dry-run', '--settings-stdin'], {recipient: config.recipient});
       return {...status(), message};

@@ -10,9 +10,12 @@ const {toolOf,createRedactor,createActivity,createDiagnostics,registerReadOnly}=
 function setupBusiness(win,app){
  let selected=null,priceResult=null,reportResult=null,busy=false,updateLocked=false;const loginWindows=new Map();
  const origins={price:'https://vipscm.superboss.cc',report:'https://viperp.superboss.cc',monthly:'https://erpa.superboss.cc'};
- const sessions={price:session.fromPartition('persist:toolkit-scm'),report:session.fromPartition('persist:toolkit-erp')};
- sessions.monthly=sessions.report;
- const progress=(tool,message,batch)=>{if(!win.isDestroyed())win.webContents.send('business-progress',{tool,message,batch});};
+ const erpSessions={
+  get price(){return session.fromPartition('persist:toolkit-scm');},
+  get report(){return session.fromPartition('persist:toolkit-erp');}
+ };
+ const sessions={get monthly(){return erpSessions.report;},get price(){return erpSessions.price;},get report(){return erpSessions.report;}};
+ const progress=(tool,message,batch)=>{const task=requestContext.getStore();if(task?.tool===tool)task.step=redact(message,180);if(!win.isDestroyed())win.webContents.send('business-progress',{tool,message,batch});};
  const requestContext=new AsyncLocalStorage();
  const redact=createRedactor({home:app.getPath('home')});
  const activity=createActivity({directory:path.join(app.getPath('userData'),'logs'),redact});
@@ -21,7 +24,7 @@ function setupBusiness(win,app){
   running=value;
   if(!win.isDestroyed())win.webContents.send('business-busy',running);
  }
- const loginState=createLoginState({directory:path.join(app.getPath('userData'),'login-state'),sessions:{price:sessions.price,report:sessions.report},encryption:safeStorage,onError:message=>{progress('price',message);progress('report',message);progress('monthly',message);}});
+ const loginState=createLoginState({directory:path.join(app.getPath('userData'),'login-state'),sessions:erpSessions,encryption:safeStorage,onError:message=>{progress('price',message);progress('report',message);progress('monthly',message);}});
  // The overview and updater do not need ERP credentials. Opening them must
  // not wait for a macOS Keychain prompt before the main window is ready.
  let loginReady = process.platform === 'darwin' ? null : loginState.restore();
@@ -45,13 +48,14 @@ function setupBusiness(win,app){
    if(event.sender!==win.webContents)throw Error('非法调用来源');
    const tool=action==='login'&&Object.hasOwn(origins,args[0])?args[0]:toolOf(action);
    const started=Date.now();
+   const task={action,tool};
    try{
     if(updateLocked)throw Error('正在准备重启更新，请稍候');
-    const data=await requestContext.run({action,tool},()=>fn(...args));
+    const data=await requestContext.run(task,()=>fn(...args));
     activity.record({action,tool,ok:true,ms:Date.now()-started});
     return {ok:true,data};
    }catch(error){
-    activity.record({action,tool,ok:false,ms:Date.now()-started,error:error.message});
+    activity.record({...task,ok:false,ms:Date.now()-started,code:error.code,error:error.message});
     return {ok:false,error:error.message};
    }
   });
@@ -65,8 +69,9 @@ function setupBusiness(win,app){
  }
  async function runReminder(fn){
   const context={tool:'taobao-reminders',action:'taobao-reminders-scheduled'};
-  try{return await exclusive(fn,context);}
-  catch(error){activity.record({...context,ok:false,error:error.message});throw error;}
+  const started=Date.now();
+  try{return await requestContext.run(context,()=>exclusive(fn,context));}
+  catch(error){activity.record({...context,ok:false,ms:Date.now()-started,code:error.code,error:error.message});throw error;}
  }
  async function loginWindow(tool,show=true){
   await ensureLoginReady();
@@ -135,7 +140,7 @@ function setupBusiness(win,app){
  for(const [action,method] of [['login','login'],['choose','choose'],['scan','scan'],['plan','plan'],['publish','publish'],['history','history'],['resolve','resolvePending'],['archive','openArchive']])handle('business-taobao-soutu-'+action,(...args)=>exclusive(()=>soutu[method](...args)));
  const sycm=require('./sycm.cjs').createSycmTool({app,win,dialog,shell:require('electron').shell,progress:message=>progress('sycm',message)});
  for(const method of ['choose','login','start','resume','results'])handle('business-sycm-'+method,(...args)=>exclusive(()=>sycm[method](...args)));
- const diagnostics=createDiagnostics({app,safeStorage,sessions,ensureLoginReady,reminders,getRunning:()=>running,activity,redact});
+ const diagnostics=createDiagnostics({app,safeStorage,sessions,passiveCredentials:process.platform==='darwin',ensureLoginReady,reminders,getRunning:()=>running,activity,redact});
  registerReadOnly({ipcMain,win,redact},'business-ops-snapshot',diagnostics.snapshot);
  registerReadOnly({ipcMain,win,redact},'business-task-state',()=>running);
  win.on('close',e=>{if(busy){e.preventDefault();dialog.showMessageBox(win,{message:'任务正在执行，请完成后再关闭工具箱。'});}});

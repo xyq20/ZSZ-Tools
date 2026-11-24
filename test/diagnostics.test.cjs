@@ -329,7 +329,7 @@ test('an empty userData directory still returns a complete overview and snapshot
  assert.equal(overview.tools['taobao-soutu'].staleLock,null);
  assert.deepEqual(overview.env.components,{ok:false,missing:['monthly','return-rate','sycm','taobao-reminders','taobao-stock','erp-stock-rules']});
  assert.deepEqual(snapshot.errors,[]);assert.deepEqual(snapshot.update,{pending:false,failures:[]});
- assert.deepEqual(snapshot.logs,{startup:null,install:null});
+ assert.deepEqual(snapshot.logs,{startup:null,install:null,events:null});
  assert.equal(snapshot.logins.find(l=>l.id==='kuaimai-api').note,'未导入；进入退货率报表时会检查本机库存监控台配置');
  assert.deepEqual(await fs.readdir(root),[]);
 });
@@ -390,11 +390,11 @@ test('activity skips quiet status calls, never stores arguments, redacts and rot
  activity.record({action:'price-query',tool:'price',ok:true,ms:1200.6});
  const recent=activity.recent();
  assert.equal(recent.length,2);assert.equal(recent[0].action,'price-query');assert.equal(recent[0].ms,1201);
- assert.deepEqual(Object.keys(recent[1]).sort(),['action','at','error','ms','ok','tool']);
+ assert.deepEqual(Object.keys(recent[1]).sort(),['action','at','error','id','ms','ok','tool']);
  await activity.flush();
  const log=await fs.readFile(path.join(directory,'toolkit-errors.log'),'utf8');
  assert.ok(!log.includes('hook/0000')&&!log.includes('sk-PLANTED')&&!log.includes('args'));
- assert.deepEqual(Object.keys(JSON.parse(log.trim())).sort(),['action','at','message','tool']);
+ assert.deepEqual(Object.keys(JSON.parse(log.trim())).sort(),['action','at','id','message','ms','tool']);
  for(let i=0;i<12;i++)activity.record({action:'sycm-start',tool:'sycm',ok:false,ms:i,error:`第 ${i} 次失败`});
  await activity.flush();
  const names=(await fs.readdir(directory)).sort();

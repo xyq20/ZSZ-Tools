@@ -81,3 +81,28 @@ test('the Windows shortcut selects only an installed newer slot and does not red
  assert.equal(launchTarget(next,'1.1.0'),null);
  assert.equal(launchTarget(executable,'2.0.0'),null);
 });
+
+test('offline automatic check is logged and can recover on manual retry', async t => {
+ const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'automatic-check-'));
+ t.after(() => fs.rm(directory, {recursive:true, force:true}));
+ let online = false;
+ let requests = 0;
+ const updater = createUpdater({
+  app: {getPath:()=>directory, getVersion:()=>'0.4.18'},
+  platform:'darwin', arch:'arm64',
+  fetchRelease:async()=>{
+   requests++;
+   if (!online) throw Error('ENETUNREACH');
+   return release();
+  }
+ });
+ const [auto, manual] = await Promise.all([updater.check('自动'), updater.check()]);
+ assert.equal(requests, 1);
+ assert.equal(auto.status, 'error');
+ assert.equal(manual.status, 'error');
+ online = true;
+ assert.equal((await updater.check()).status, 'available');
+ const log = await fs.readFile(path.join(directory,'updates','update-events.log'),'utf8');
+ assert.match(log,/自动.*checking → error.*ENETUNREACH/);
+ assert.match(log,/手动.*checking → available/);
+});

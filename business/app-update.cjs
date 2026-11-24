@@ -125,17 +125,20 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},platform=process.
  const pending=path.join(root,'pending.json');
  let state={status:'idle',current:app.getVersion()},info,file,directory,prepared,token,operation,controller;
  let canQuit=false,disposed=false;
- const emit=patch=>{state={...state,...patch};notify({...state});return {...state};};
+ const record = require('./update-log.cjs').createUpdateLog(root, require('node:os').homedir());
+ const emit=(patch,origin)=>{state={...state,...patch};record(state,origin);notify({...state});return {...state};};
  const run=fn=>{if(operation)return operation;operation=fn().finally(()=>{operation=null;});return operation;};
  async function discard(){
   if(prepared){await fs.rm(prepared.staged,{recursive:true,force:true,maxRetries:4,retryDelay:100});prepared=null;}
  }
  return {
   state:()=>({...state}),canQuit:()=>canQuit,isInstalling:()=>state.status==='installing',
-  check(){
+  check(origin='手动'){
+   if(disposed)return Promise.resolve({...state});
+   if(operation && state.status==='checking')return operation;
    if(operation||['downloaded','installing'].includes(state.status))return Promise.resolve({...state});
    return run(async()=>{
-    emit({status:'checking',message:'正在检查更新…'});
+    emit({status:'checking',latest:null,message:'正在检查更新…'},origin);
     try{
      info=validateAsset(await fetchRelease(manifestUrl),app.getVersion(),platform,arch);
      let message='';
@@ -206,7 +209,7 @@ function createUpdater({app,manifestUrl,business,notify=()=>{},platform=process.
      await Promise.all(['healthy','healthy.failed'].map(name=>fs.rm(path.join(directory,name),{force:true})));
      const version=info.latest,executable=app.getPath('exe');
      await atomicJSON(pending,{schema:prepared?2:1,version,directory,token,clickedAt});
-     if(prepared)await launch({platform,directory,version,prepared,token,executable,clickedAt});
+     if(prepared)await launch({platform,directory,version,prepared,token,executable,clickedAt,currentVersion:app.getVersion()});
      else await launchFull({platform,directory,file,info,token,executable});
      canQuit=true;app.quit();return {...state};
     }catch(error){

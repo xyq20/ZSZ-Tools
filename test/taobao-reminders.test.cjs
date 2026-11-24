@@ -178,3 +178,22 @@ test('existing Mac background service reads the time set in the toolbox without 
     assert.equal(runs[0][3].TAOBAO_REMINDER_STATE_DIR, state);
     assert.deepEqual(runs[0][4], {webhook: null, recipient: settings.recipient});
   });
+
+test('Mac startup and passive diagnostics leave encrypted reminder defaults untouched', {skip:process.platform!=='darwin'}, async t => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'toolkit-passive-defaults-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  const dir=path.join(root,'taobao-reminders');
+  await fs.mkdir(dir);
+  await fs.writeFile(path.join(dir,'defaults.bin'),'encrypted fixture');
+  let reads=0;
+  const tool=createTaobaoReminders({app:{isPackaged:true,getPath:()=>root},
+    safeStorage:{decryptString(){reads++;return JSON.stringify(settings);}},
+    resourcesPath:root,blocked:()=>false,progress:()=>{}});
+  try {
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(tool.peekStatus().configDeferred,true);
+    assert.equal(reads,0);
+    assert.equal(tool.status().hasWebhook,true);
+    assert.equal(reads,1);
+  } finally {tool.stop();}
+});

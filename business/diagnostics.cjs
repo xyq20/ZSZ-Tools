@@ -156,6 +156,8 @@ function fileReader(fs) {
 }
 
 // ---------------------------------------------------------------- activity
+const processStartedAt = new Date(Date.now() - process.uptime()*1000).toISOString();
+
 function createActivity({directory, redact = createRedactor(), persist = true, limit = 40, maxBytes = 256 * KB,
   fs = require('node:fs/promises')} = {}) {
   const entries = [];
@@ -174,17 +176,23 @@ function createActivity({directory, redact = createRedactor(), persist = true, l
   }
 
   // Never receives IPC arguments: callers pass only names, outcome and timing.
-  function record({action, tool, ok, ms, error} = {}) {
+  function record({action, tool, ok, ms, error, step, code} = {}) {
     try {
       const name = String(action ?? '').slice(0, 80);
       if (ok && QUIET_SUCCESS.has(name)) return;
       const entry = {at: new Date().toISOString(), action: name, tool: String(tool ?? '').slice(0, 40), ok: Boolean(ok),
         ms: typeof ms === 'number' && Number.isFinite(ms) ? Math.max(0, Math.round(ms)) : null};
-      if (!entry.ok) entry.error = clean(error == null ? '' : String(error), 300);
+      if (!entry.ok) {
+        entry.id = require('node:crypto').randomUUID();
+        entry.error = clean(error == null ? '' : String(error), 300);
+        if (step) entry.step = clean(step,180);
+        if (code != null) entry.code = clean(String(code),64);
+      }
       entries.push(entry);
       if (entries.length > limit) entries.splice(0, entries.length - limit);
       if (!entry.ok && enabled) {
-        const line = JSON.stringify({at: entry.at, action: entry.action, tool: entry.tool, message: entry.error}) + '\n';
+        const {error: message, ok: ignored, ...fields} = entry;
+        const line = JSON.stringify({...fields, message}) + '\n';
         queue = queue.then(() => append(line)).catch(() => {});
       }
     } catch {}
@@ -192,7 +200,7 @@ function createActivity({directory, redact = createRedactor(), persist = true, l
 
   const recent = () => entries.slice().reverse().map(entry => ({...entry}));
   const memoryErrors = () => entries.filter(entry => !entry.ok).reverse().slice(0, 30)
-    .map(({at, action, tool, error}) => ({at, action, tool, message: error ?? ''}));
+    .map(({ok, error, ...fields}) => ({...fields, message: error ?? ''}));
   function parse(text) {
     const result = [];
     for (const line of text.split(/\r?\n/).reverse()) {
@@ -202,7 +210,8 @@ function createActivity({directory, redact = createRedactor(), persist = true, l
         const at = isObject(value) ? iso(value.at) : null;
         if (!at) continue;
         result.push({at, action: String(value.action ?? '').slice(0, 80), tool: String(value.tool ?? '').slice(0, 40),
-          message: clean(String(value.message ?? ''), 300)});
+          id: clean(value.id,64), step:clean(value.step,180), code:clean(value.code,64),
+          ms: Number.isFinite(value.ms) ? value.ms : null, message: clean(String(value.message ?? ''), 300)});
       } catch {}
     }
     return result;
@@ -238,7 +247,7 @@ function registerReadOnly({ipcMain, win, redact = createRedactor()}, name, fn) {
 }
 
 // ---------------------------------------------------------------- diagnostics
-function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureLoginReady = () => loginReady, reminders, getRunning = () => null, activity,
+function createDiagnostics({app, safeStorage, sessions = {}, passiveCredentials = false, loginReady, ensureLoginReady = () => loginReady, reminders, getRunning = () => null, activity,
   redact, fs = require('node:fs/promises'), os = require('node:os'), proc = process,
   runtimePaths, browserPath, componentsRoot, timeoutMs = 1500, loginWaitMs = 800, stateMaxBytes = STATE_MAX_BYTES} = {}) {
   const clean = typeof redact === 'function' ? redact : createRedactor({home: attempt(() => app.getPath('home'))});
@@ -248,7 +257,7 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
   const resolveRuntimePaths = () => runtimePaths || require('./monthly.cjs').runtimePaths;
   const resolveBrowserPath = () => browserPath || require('./taobao.cjs').browserPath;
 
-  const encryption = () => attempt(() => Boolean(safeStorage.isEncryptionAvailable()), null);
+  const encryption = () => passiveCredentials ? null : attempt(() => Boolean(safeStorage.isEncryptionAvailable()), null);
 
   async function loginReadyWithin(ms) {
     loginSettledPromise ??= Promise.resolve().then(ensureLoginReady).then(() => true, () => true);
@@ -383,10 +392,10 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
 
   // reminders.status() only reads files; recipient itself is never returned.
   function remindersProbe() {
-    const status = reminders.status();
+    const status = passiveCredentials && reminders.peekStatus ? reminders.peekStatus() : reminders.status();
     if (!isObject(status)) throw Error('读取失败');
     const message = status.message == null ? '' : String(status.message);
-    return {hasLogin: Boolean(status.hasLogin), hasWebhook: Boolean(status.hasWebhook), hasRecipient: Boolean(status.recipient),
+    return {hasLogin: Boolean(status.hasLogin), ...(status.configDeferred ? {configDeferred:true} : {}), hasWebhook: Boolean(status.hasWebhook), hasRecipient: Boolean(status.recipient),
       enabled: Boolean(status.enabled), at: typeof status.at === 'string' && /^\d{2}:\d{2}$/.test(status.at) ? status.at : null,
       nativeAgent: Boolean(status.nativeAgent), lastMessage: message ? clean(message, 160) : null,
       lastFailed: /15 分钟后重试|无法读取/.test(message),
@@ -513,7 +522,7 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
 
   const toolProbes = {
     report: async ctx => ({login: {evidence: await ctx.erpEvidence()}}),
-    price: async () => ({login: {evidence: await cookieEvidence(sessions.price)}}),
+    price: async () => ({login: {evidence: passiveCredentials ? null : await cookieEvidence(sessions.price)}}),
     monthly: async ctx => {
       const [evidence, preview] = await Promise.all([ctx.erpEvidence(), lastPreview(ctx)]);
       return {login: {evidence}, lastPreview: preview};
@@ -589,7 +598,7 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
       if (candidate.info?.isFile() && (!newest || candidate.info.mtimeMs > newest.info.mtimeMs)) newest = candidate;
     }
     if (newest) { try { install = clean(await io.readTail(newest.file, 4 * KB), 6000) || null; } catch {} }
-    return {startup, install};
+    return {startup, install, ...(install && newest ? {installTarget:nodePath.basename(nodePath.dirname(newest.file)).split('-')[0]} : {})};
   }
 
   async function factsProbe(ctx) {
@@ -599,6 +608,7 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
 
   function reminderNote(value) {
     const schedule = value.nativeAgent ? `独立巡检 ${value.at ?? '时间未知'}` : value.enabled ? `每天 ${value.at ?? '时间未知'}` : '定时未启用';
+    if (value.configDeferred) return '凭据未读取 · '+schedule;
     return `Webhook ${value.hasWebhook ? '已配置' : '未配置'} · @小谭 ${value.hasRecipient ? '已配置' : '未配置'} · ${schedule}`;
   }
 
@@ -659,7 +669,11 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
     const root = app.getPath('userData');
     let erp = null;
     const ctx = {root, at: (...parts) => nodePath.join(root, ...parts), running: runningNow(),
-      erpEvidence: () => (erp ??= cookieEvidence(sessions.report))};
+      erpEvidence: () => passiveCredentials ? null : (erp ??= cookieEvidence(sessions.report))};
+    // Read the update trace before slower browser and Keychain probes consume
+    // the snapshot timeout. A partial machine report should still explain updates.
+    const events = full ? await waitUpTo(io.readTail(ctx.at('updates','update-events.log'), 4 * KB)
+      .then(text => clean(text, 6000) || null, () => null), timeoutMs, null) : null;
     const tasks = {env: envProbe};
     for (const key of TOOL_KEYS) tasks['tool:' + key] = () => toolProbes[key](ctx);
     if (full) {
@@ -679,7 +693,7 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
     };
     const tools = {};
     for (const key of TOOL_KEYS) tools[key] = pick('tool:' + key, error => ({error}));
-    const result = {schema: 1, generatedAt: new Date().toISOString(), incomplete: false, running: ctx.running,
+    const result = {schema: 1, processStartedAt, generatedAt: new Date().toISOString(), incomplete: false, running: ctx.running,
       env: pick('env', error => ({encryption: null, python: null, browser: {name: null}, components: {ok: null, missing: []}, error})),
       tools};
     if (full) {
@@ -692,7 +706,7 @@ function createDiagnostics({app, safeStorage, sessions = {}, loginReady, ensureL
         logins: logins(tools, facts),
         activity: attempt(() => activity && typeof activity.recent === 'function' ? activity.recent() : [], []),
         errors: pick('errors', () => []),
-        logs: pick('logs', error => ({startup: null, install: null, error})),
+        logs: {...pick('logs', error => ({startup: null, install: null, error})), events},
         paths: {userData: root, logs: nodePath.join(root, 'logs'), updates: nodePath.join(root, 'updates')},
       });
     }

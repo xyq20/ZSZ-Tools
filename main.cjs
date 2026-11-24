@@ -32,12 +32,18 @@ if(process.platform==='darwin')Menu.setApplicationMenu(Menu.buildFromTemplate([
  {label:'编辑',submenu:[{label:'撤销',role:'undo'},{label:'重做',role:'redo'},{type:'separator'},{label:'剪切',role:'cut'},{label:'复制',role:'copy'},{label:'粘贴',role:'paste'},{label:'全选',role:'selectAll'}]},
  {label:'窗口',submenu:[{label:'最小化',role:'minimize'},{label:'缩放',role:'zoom'},{label:'关闭窗口',role:'close'}]}
 ]));
-win=new BrowserWindow({width:1280,height:850,minWidth:1000,minHeight:680,backgroundColor:'#f5f6f8',title:'钊叔工具箱',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+win=new BrowserWindow({width:1280,height:850,minWidth:1000,minHeight:680,backgroundColor:'#f5f6f8',title:'钊叔工具箱',webPreferences:{...(process.platform==='darwin'?{partition:'toolkit-local-ui'}:{}),preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
 business=require('./business/desktop.cjs').setupBusiness(win,app);
 const updateNetwork=createUpdateNetwork(require('electron').session.fromPartition('toolkit-updates'));
 updater=createUpdater({app,manifestUrl:updateConfig.manifestUrl,business,fetchRelease:updateNetwork.manifest,getNetworkRoute:updateNetwork.route,downloader:(info,file,options)=>downloadFile(info,file,{...options,getResponse:updateNetwork.response}),
  notify:data=>{if(!win.isDestroyed())win.webContents.send('update-progress',data);}
 });
+if(app.isPackaged){
+ const checkAutomatically=()=>{if(!win.isDestroyed())void updater.check('自动').catch(()=>{});};
+ const first=setTimeout(checkAutomatically,15000);
+ const repeat=setInterval(checkAutomatically,6*60*60*1000);
+ win.once('closed',()=>{clearTimeout(first);clearInterval(repeat);});
+}
 win.on('close',e=>{if(updater.isInstalling()&&!updater.canQuit())e.preventDefault();});
 if(updateLaunch)win.once('ready-to-show',showUpdateWindow);
 ipcMain.handle('main-window-ready',async event=>{

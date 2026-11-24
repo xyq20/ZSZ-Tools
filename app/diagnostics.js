@@ -140,8 +140,9 @@ function setupDiagnostics({tools,request,toast}) {
       row.append(element('dt',label),element('dd',value));
       return row;
     }));
-    find('ops-install-details').hidden=!snapshot?.logs?.install;
-    find('ops-install-log').textContent=snapshot?.logs?.install||'';
+    const logText=[snapshot?.logs?.events,snapshot?.logs?.install].filter(Boolean).join('\n');
+    find('ops-install-details').hidden=!logText;
+    find('ops-install-log').textContent=logText;
     const rows=[];
     for (const entry of snapshot?.logins||[]) {
       const related=entry.tools.filter(id=>tools.has(id));
@@ -238,12 +239,57 @@ function setupDiagnostics({tools,request,toast}) {
   find('ops-refresh').addEventListener('click',refresh);
   find('ops-copy').addEventListener('click',async()=>{
     if (!snapshot) return;
-    const lines=['钊叔工具箱诊断摘要','检测时间（北京） '+showTime(snapshot.generatedAt),
-      ...machineFacts().map(([label,value])=>label+' · '+value),
-      ...snapshot.logins.map(entry=>entry.label+' · '+(loginStates[entry.state]||'待确认')),
-      ...issues().map(entry=>entry.name+' · '+entry.status),
-      ...(snapshot.incomplete?['部分项目读取超时']:[])];
-    try {await navigator.clipboard.writeText(lines.join('\n'));toast('已复制诊断摘要');}
+    if (load) await load.catch(()=>{}); else await refresh();
+    const clock = new Intl.DateTimeFormat('zh-CN', {timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',
+      day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+    const format = value => clock.format(new Date(value));
+    const errors = [...(snapshot.errors||[]), ...(snapshot.activity||[]).filter(row=>!row.ok)]
+      .sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
+    const unique = new Map();
+    for (const row of errors) {
+      const key = row.id || [row.at,row.action].join('/');
+      if (!unique.has(key)) unique.set(key,row);
+    }
+    const failures = [...unique.values()];
+    const started = Date.parse(snapshot.processStartedAt);
+    const lines = ['钊叔工具箱诊断摘要（北京时间）','采集 '+format(snapshot.generatedAt),
+      ...(Number.isFinite(started)?['本次启动 '+format(started)]:[]),
+      ...machineFacts().map(([label,value])=>label+' · '+value)];
+    function failure(row) {
+      const label = [toolName(row.tool),actionName(row.action),'('+row.action+')'].join(' · ');
+      return [format(row.at)+' '+label, row.id && '任务编号 '+row.id,
+        Number.isFinite(row.ms) && '开始 '+format(Date.parse(row.at)-row.ms)+'，耗时 '+row.ms+' ms',
+        row.step && '最后进度 '+row.step, row.code && '错误码 '+row.code, row.message||row.error]
+        .filter(Boolean).join('\n');
+    }
+    for (const [title,rows] of [
+      ['本次运行失败',failures.filter(row=>Date.parse(row.at)>=started)],
+      ['历史失败',failures.filter(row=>!(Date.parse(row.at)>=started))]]) {
+      lines.push('',title,...(rows.length?rows.slice(0,5).map(failure):['无记录']));
+    }
+    function localize(text) {
+      return text.split('\n').map(line=>line.replace(/^(\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:\.\d+)?Z?)/,
+        stamp=>{const date=Date.parse(stamp.replace(' ','T'));return Number.isFinite(date)?format(date):stamp;})
+        .replace(/(idle|checking|current|available|unsupported|error|downloading|preparing|downloaded|installing) → (\w+)/,
+          (_,from,to)=>(updateLabels[from]||from)+' → '+(updateLabels[to]||to))
+        .replace(/(待检查|尚未检查|当前已是最新版本|已是最新版本|有新版可下载) → 正在检查 · 上一阶段 /,'$1 → 正在检查 · 等待间隔 ')).join('\n').trim();
+    }
+    const logs = snapshot.logs || {};
+    const events = (logs.events||'').trim().split('\n').filter(Boolean);
+    for(const [title,rows] of [
+      ['本次运行更新记录',events.filter(line=>Date.parse(line.split(' · ')[0])>=started)],
+      ['历史更新记录',events.filter(line=>!(Date.parse(line.split(' · ')[0])>=started))]]) {
+      if(rows.length)lines.push('',title,localize(rows.slice(-16).join('\n')));
+    }
+    if(logs.install)lines.push('','最近安装记录'+(logs.installTarget?' · 目标 v'+logs.installTarget:''),localize(logs.install));
+    if(logs.startup)lines.push('','启动日志',localize(logs.startup));
+    const successes=(snapshot.activity||[]).filter(row=>row.ok).slice(0,6);
+    if(successes.length)lines.push('','本次最近成功操作',...successes.map(row=>
+      [format(row.at),toolName(row.tool),actionName(row.action),row.action,Number.isFinite(row.ms)?row.ms+' ms':''].filter(Boolean).join(' · ')));
+    lines.push('','登录与配置',...snapshot.logins.map(entry=>entry.label+' · '+(loginStates[entry.state]||'待确认')),
+      ...issues().map(entry=>[entry.name,entry.status,entry.detail].filter(Boolean).join(' · ')));
+    if(snapshot.incomplete||snapshotFailed)lines.push('部分项目读取失败或超时，请核对采集时间');
+    try {await navigator.clipboard.writeText(lines.join('\n'));toast('已复制诊断信息');}
     catch {toast('无法写入剪贴板，请重试。');}
   });
 

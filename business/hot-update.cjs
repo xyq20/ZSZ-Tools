@@ -116,9 +116,9 @@ async function assertPrepared(prepared) {
   if(current.some((value,index)=>value!==prepared.stamps[index]))throw Error('已准备的新版发生变化，请重新准备更新');
 }
 
-async function launchHot({prepared,executable,directory,token,version,clickedAt}) {
+async function launchHot({prepared,executable,directory,token,version,clickedAt,currentVersion}) {
   const plan={staged:prepared.staged,target:prepared.target,previousActive:prepared.previousActive,
-    executable,directory,token,version,clickedAt,parentPid:process.pid};
+    executable,directory,token,version,currentVersion,clickedAt,parentPid:process.pid};
   const ready=path.join(directory,'helper-'+token+'.ready');
   const handle=await fs.open(path.join(directory,'install-helper.log'),'w',0o600);
   try{
