@@ -151,6 +151,20 @@ async function verify(){
   console.log('Update prepared');
   const clicked=Date.now();
   await page.locator('#install-update').click({noWaitAfter:true}).catch(error=>{if(!page.isClosed())throw error;});
+  // Sample only this disposable runner's new app when its receipt is delayed.
+  if (!win) setTimeout(async () => {
+    try {
+      const log = await fs.readFile(path.join(directory,'install.log'),'utf8');
+      const pid = Number(log.match(/启动新版 PID=(\d+)/)?.[1]);
+      if (!pid || await fs.access(path.join(directory,'healthy')).then(()=>true,()=>false)) return;
+      const sample = path.join(workspace,'new-app-sample.txt');
+      await exec('/usr/bin/sample',[String(pid),'1','10','-file',sample]);
+      const text = await fs.readFile(sample,'utf8');
+      const lines = text.split('\n');
+      const relevant = lines.filter(x=>/keychain|SecItem|SecKey|SecurityAgent|ShowMessageBox|NSAlert|RunModal|os_crypt/i.test(x)).slice(0,20);
+      console.log('DELAYED_APP_SAMPLE', lines.slice(lines.findIndex(x=>x.includes('Call graph:')),lines.findIndex(x=>x.includes('Call graph:'))+45).join('\n'), relevant);
+    } catch (error) { console.warn('sample unavailable', error.message); }
+  }, 12000).unref();
   const proof=await until('new window receipt',async()=>{
    const failure=await fs.readFile(path.join(directory,'healthy.failed'),'utf8').catch(()=>null);if(failure)throw Error(failure);
    const contents=await fs.readFile(path.join(directory,'healthy'),'utf8').catch(()=>null);
