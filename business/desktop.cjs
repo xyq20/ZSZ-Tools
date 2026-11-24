@@ -98,13 +98,14 @@ function setupBusiness(win,app){
  const erpStockRules=require('./erp-stock-rules.cjs').createErpStockRulesTool({
   app,win,dialog,shell:require('electron').shell,
   getCookies:async url=>{await ensureLoginReady();return sessions.monthly.cookies.get({url});},
-  progress:message=>progress('erp-stock-rules',message),
+  progress:(message,batch)=>progress('erp-stock-rules',message,batch),
   notifySchedule:schedule=>progress('erp-stock-rules',schedule.message||'',{schedule})
  });
  for(const [action,method] of [['list','list'],['preview','preview'],['upload','upload'],['reveal','reveal'],
   ['schedule-save','saveSchedule'],['schedule-interval','updateScheduleInterval']])
   handle('business-erp-stock-rules-'+action,(...args)=>exclusive(()=>erpStockRules[method](...args)));
  handle('business-erp-stock-rules-schedule-cancel',erpStockRules.cancelSchedule);
+ handle('business-erp-stock-rules-retry-cancel',erpStockRules.cancelRetry);
  registerReadOnly({ipcMain,win,redact},'business-erp-stock-rules-schedule-status',erpStockRules.scheduleStatus);
  const stockScheduleContext={tool:'erp-stock-rules',action:'erp-stock-rules-scheduled'};
  const stockScheduleTimer=setInterval(()=>{

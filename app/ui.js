@@ -165,6 +165,7 @@ async function run(tool,fn){
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
 window.desktop?.onProgress(({ tool, message, batch }) => {
   if(tool==='erp-stock-rules'&&batch?.schedule){renderErpSchedule(batch.schedule);return;}
+  if(tool==='erp-stock-rules'&&typeof batch?.retrying==='boolean')erpRuleField('retry-cancel').hidden=!batch.retrying;
   diagnostics?.setProgress(tool,message);
   if (tool === 'return-rate' && batch) renderReturnRateProgress(batch);
   if (tool === 'taobao-soutu' && batch) renderSoutuBatch(batch, message);
@@ -325,6 +326,13 @@ for(const action of ['preview','upload']){
  });
 }
 erpRuleField('reveal').addEventListener('click',()=>run('erp-stock-rules',()=>call('erp-stock-rules-reveal')));
+erpRuleField('retry-cancel').addEventListener('click',async event=>{
+ const button=event.currentTarget;
+ button.disabled=true;
+ try{await call('erp-stock-rules-retry-cancel');}
+ catch(error){erpRuleField('progress').textContent=error.message;}
+ finally{button.disabled=false;}
+});
 erpRuleField('schedule-count').addEventListener('input',refreshActions);
 erpRuleField('schedule-unit').addEventListener('change',refreshActions);
 erpRuleField('schedule-save').addEventListener('click',()=>{

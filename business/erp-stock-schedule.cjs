@@ -81,12 +81,13 @@ function createErpStockSchedule({file, execute, notify, now = Date.now}) {
       const result = await execute({
         action: 'upload', numbers: active.rules.map(rule => rule.number),
         fingerprint: active.fingerprint, session: active.session,
-      });
+      }, () => plan.state === 'stopping');
       const accepted = result.rows.filter(row => row.status === '快麦已受理').length;
       const complete = result.complete === true && accepted === active.rules.length;
       const stopping = plan.state === 'stopping';
       const shouldContinue = complete && !stopping;
-      final = {...active, results: result.rows, state: shouldContinue ? 'pending' : complete ? 'cancelled' : 'review',
+      const finished = complete || (stopping && result.cancelled);
+      final = {...active, results: result.rows, state: shouldContinue ? 'pending' : finished ? 'cancelled' : 'review',
         nextAt:shouldContinue ? nextRun(active.intervalMs, active.nextAt) : active.nextAt,
         message: shouldContinue ? `上一轮快麦已受理 ${accepted} 条规则。` :
           `循环已停止。本轮快麦已受理 ${accepted} 条规则。${result.error || ''}`};

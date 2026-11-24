@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from playwright.sync_api import Error, expect, sync_playwright
+from playwright.sync_api import Error, TimeoutError, expect, sync_playwright
 
 
 ROOT = Path(__file__).resolve().parent
@@ -26,6 +26,8 @@ RULES_ROUTE = "/index.html#/stock/new_rule/"
 RULES_URL = "https://erpa.superboss.cc" + RULES_ROUTE
 LIST_REQUEST = "/stock/upload/newRule/ruleList"
 UPLOAD_REQUEST = "/stock/upload/newRule/manual"
+UPLOAD_LIMIT_CODE = "20030013"
+CAPACITY_RETRY_SECONDS = 180
 CSV_PATH = ROOT / "output" / "全部上传规则.csv"
 # These page cookies rotate when Chrome reopens while the authenticated ERP
 # session remains the same. Chrome still sends them in its normal requests.
@@ -328,9 +330,37 @@ def select_rules(rules, numbers):
     return selected
 
 
+def confirm_upload(page, dialog, success, capacity_alert):
+    with page.expect_response(lambda response: matches_request(response, UPLOAD_REQUEST), timeout=20_000) as waiting:
+        dialog.get_by_role("button", name="确定", exact=True).click(timeout=5000)
+    response = waiting.value
+    if response.ok:
+        expect(success.or_(capacity_alert).first).to_be_visible(timeout=10_000)
+    else:
+        try:
+            capacity_alert.wait_for(state="visible", timeout=2500)
+        except TimeoutError:
+            raise RuntimeError(f"快麦返回 HTTP {response.status}") from None
+    if capacity_alert.is_visible():
+        capacity_alert.get_by_role("button", name="确定", exact=True).click(timeout=5000)
+        expect(capacity_alert).to_be_hidden()
+        return False
+    if not response.ok:
+        raise RuntimeError(f"快麦返回 HTTP {response.status}")
+    expect(success).to_be_visible(timeout=1000)
+    return True
+
+
+def remaining_rows(selected, start):
+    return [{"number": number, "status": "未处理"} for number, _ in selected[start:]]
+
+
 def run_batch(panel, selected, current_page, columns, preview, announce=print, *, expected_session=None):
     page = panel.page
     success = page.locator(".el-message--success:visible").get_by_text("操作成功", exact=True)
+    capacity_alert = page.get_by_role("dialog").filter(has_text="已达到库存上传任务上限").filter(
+        has_text=re.compile(rf"类型码\s*[：:]\s*{UPLOAD_LIMIT_CODE}\b")
+    )
     results = []
     for index, (number, rule) in enumerate(selected):
         announce(f"正在处理 {index + 1}/{len(selected)} · {rule.description}")
@@ -348,19 +378,20 @@ def run_batch(panel, selected, current_page, columns, preview, announce=print, *
             else:
                 if expected_session is not None and session_fingerprint(page) != expected_session:
                     raise RuntimeError("快麦会话已变化，请重新读取规则。")
-                with page.expect_response(lambda response: matches_request(response, UPLOAD_REQUEST), timeout=20_000) as waiting:
-                    confirmation_started = True
-                    dialog.get_by_role("button", name="确定", exact=True).click(timeout=5000)
-                if not waiting.value.ok:
-                    raise RuntimeError(f"快麦返回 HTTP {waiting.value.status}")
-                expect(success).to_be_visible(timeout=10_000)
+                confirmation_started = True
+                if not confirm_upload(page, dialog, success, capacity_alert):
+                    return {
+                        "complete": False,
+                        "rows": [*results, {"number": number, "status": "等待重试"}, *remaining_rows(selected, index + 1)],
+                        "retry": {"code": UPLOAD_LIMIT_CODE, "number": number, "seconds": CAPACITY_RETRY_SECONDS},
+                    }
                 status = "快麦已受理"
             results.append({"number": number, "status": status})
             announce(f"{number:2}. {rule.description} · {status}")
         except (Error, AssertionError, RuntimeError, KeyboardInterrupt) as exc:
             status = "结果待核实" if confirmation_started else "未提交"
             results.append({"number": number, "status": status})
-            results.extend({"number": later, "status": "未处理"} for later, _ in selected[index + 1:])
+            results.extend(remaining_rows(selected, index + 1))
             announce(f"{number:2}. {rule.description} · {status}")
             detail = str(exc).splitlines() or ["操作中断"]
             return {"complete": False, "rows": results, "error": detail[0]}
@@ -380,6 +411,8 @@ def main():
         with open_browser(profile) as page:
             panel = reach_rules_page(page)
             rules, columns, last_page = collect_rules(panel)
+            approved_session = session_fingerprint(page)
+            approved_catalog = catalog_fingerprint(rules, page.url)
             export_rules(rules)
             print(f"共 {len(rules)} 条规则，清单已保存到 {CSV_PATH}", flush=True)
             for number, rule in enumerate(rules, 1):
@@ -399,7 +432,22 @@ def main():
                         break
                     except ValueError as exc:
                         print(exc)
-            result = run_batch(panel, select_rules(rules, numbers), last_page, columns, args.preview is not None)
+            selected = select_rules(rules, numbers)
+            while True:
+                result = run_batch(panel, selected, last_page, columns, args.preview is not None,
+                                   expected_session=approved_session)
+                retry = result.get("retry")
+                if retry is None:
+                    break
+                start = next(index for index, (number, _) in enumerate(selected) if number == retry["number"])
+                selected = selected[start:]
+                print(f"快麦已达到上传任务上限。等待 3 分钟后从第 {retry['number']} 条规则继续。", flush=True)
+                time.sleep(retry["seconds"])
+                page.goto("about:blank")
+                panel = reach_rules_page(page, allow_login=False)
+                current_rules, columns, last_page = collect_rules(panel)
+                if approved_session != session_fingerprint(page) or approved_catalog != catalog_fingerprint(current_rules, page.url):
+                    raise RuntimeError("等待期间快麦会话或规则清单已变化，请核对已受理规则后重新选择。")
             if not result["complete"]:
                 print(f'本批停止。{result["error"]}')
                 for item in result["rows"]:

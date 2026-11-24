@@ -74,3 +74,66 @@ test('a schedule uses the approved rules and never starts an immediate upload', 
   assert.deepEqual(actions,['list']);
   assert.equal(tool.cancelSchedule().state,'cancelled');
 });
+
+function limited(numbers, index) {
+  const status = position => position < index ? '快麦已受理' : position === index ? '等待重试' : '未处理';
+  return {complete:false, retry:{code:'20030013',number:numbers[index],seconds:180},
+    rows:numbers.map((number,position)=>({number,status:status(position)}))};
+}
+
+async function retryFixture(t, upload, waitForRetry) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'erp-stock-capacity-'));
+  t.after(() => fs.rm(root, {force:true,recursive:true}));
+  const rules = Array.from({length:7}, (_,index)=>({number:index+1,name:`规则 ${index+1}`,
+    priority:String(index+1),manual_status:'启用',created_at:'2026-01-01 00:00:00'}));
+  const tool = createErpStockRulesTool({app:{getPath:()=>root},getCookies:async()=>[],progress:()=>{},
+    dialog:{showMessageBox:async()=>({response:1})},waitForRetry,
+    runner:async(_paths,job)=>{
+      if(job.action==='list')return {rules,fingerprint:'catalog',session:'session'};
+      assert.equal(job.fingerprint,'catalog');
+      assert.equal(job.session,'session');
+      return upload(job.numbers);
+    },
+  });
+  await tool.list();
+  return {tool, numbers:rules.map(rule=>rule.number)};
+}
+
+test('capacity retry waits three minutes per rejection and resumes at the failed rule', async t => {
+  const attempts = [];
+  const waits = [];
+  const {tool,numbers} = await retryFixture(t, pending=>{
+    attempts.push(pending);
+    if(attempts.length===1)return limited(pending,5);
+    if(attempts.length===2)return limited(pending,0);
+    return {complete:true,rows:pending.map(number=>({number,status:'快麦已受理'}))};
+  }, async ms=>{waits.push(ms);});
+  const result=await tool.upload(numbers);
+  assert.deepEqual(attempts,[numbers,[6,7],[6,7]]);
+  assert.deepEqual(waits,[180000,180000]);
+  assert.equal(result.complete,true);
+  assert.deepEqual(result.rows,numbers.map(number=>({number,status:'快麦已受理'})));
+});
+
+test('stopping a capacity wait keeps prior results and performs no retry', async t => {
+  let waiting;
+  const ready=new Promise(resolve=>{waiting=resolve;});
+  const attempts=[];
+  const {tool,numbers}=await retryFixture(t,pending=>{
+    attempts.push(pending);
+    return limited(pending,5);
+  }, (_ms,_value,{signal})=>new Promise((resolve,reject)=>{
+    signal.addEventListener('abort',()=>reject(signal.reason),{once:true});
+    waiting();
+  }));
+  const inProgress=tool.upload(numbers);
+  await ready;
+  assert.equal(tool.cancelRetry(),true);
+  const result=await inProgress;
+  assert.equal(result.cancelled,true);
+  assert.deepEqual(attempts,[numbers]);
+  assert.deepEqual(result.rows.map(row=>row.status),[
+    '快麦已受理','快麦已受理','快麦已受理','快麦已受理','快麦已受理','未处理','未处理',
+  ]);
+  assert.equal(tool.cancelRetry(),false);
+});

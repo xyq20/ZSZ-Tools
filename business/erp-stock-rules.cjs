@@ -1,9 +1,11 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const {setTimeout: delay} = require('node:timers/promises');
 const {runtimePaths, runPython} = require('./monthly.cjs');
 const {createErpStockSchedule, parseInterval} = require('./erp-stock-schedule.cjs');
 
 const ERP_ORIGIN = 'https://erpa.superboss.cc';
+const CAPACITY_RETRY_SECONDS = 180;
 
 function selectedRules(rules, numbers) {
   if (!Array.isArray(numbers) || !numbers.length || new Set(numbers).size !== numbers.length ||
@@ -29,7 +31,8 @@ function chromeCookies(cookies) {
   });
 }
 
-function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress, notifySchedule = () => {}, runner = runPython}) {
+function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress, notifySchedule = () => {},
+  runner = runPython, waitForRetry = delay}) {
   const root = path.join(app.getPath('userData'), 'erp-stock-rules');
   const output = path.join(root, '全部上传规则.csv');
   const home = app.getPath('home');
@@ -42,6 +45,7 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
     bridge: path.join(app.isPackaged ? process.resourcesPath : __dirname, 'erp-stock-rules-python', 'bridge.py'),
   };
   let catalog = null;
+  let retryWait = null;
 
   async function execute(job) {
     const hasExisting = await fs.stat(existing).then(entry => entry.isDirectory(), () => false);
@@ -50,7 +54,49 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
     return runner(paths, {...job, profile, cookies}, data => progress(data.message), {label: '库存规则'});
   }
 
-  const schedule = createErpStockSchedule({file:path.join(root, 'schedule.json'), execute, notify:notifySchedule});
+  async function runUpload(job, stopping = () => false) {
+    const accepted = [];
+    let pending = job.numbers;
+    while (true) {
+      let result;
+      try {
+        result = await execute({...job, numbers:pending});
+      } catch (error) {
+        if (!accepted.length) throw error;
+        return {complete:false, error:error.message,
+          rows:[...accepted, ...pending.map(number => ({number,status:'结果待核实'}))]};
+      }
+      if (!result.retry) return {...result, rows:[...accepted, ...result.rows]};
+      const index = pending.indexOf(result.retry.number);
+      if (result.complete || result.retry.code !== '20030013' || result.retry.seconds !== CAPACITY_RETRY_SECONDS ||
+          index < 0 || !Array.isArray(result.rows) || result.rows.length !== pending.length ||
+          result.rows.some((row, position) => row.number !== pending[position] ||
+            row.status !== (position < index ? '快麦已受理' : position === index ? '等待重试' : '未处理'))) {
+        return {complete:false, error:'重试位置与快麦返回结果不符，请先核对。',
+          rows:[...accepted, ...pending.map(number => ({number,status:'结果待核实'}))]};
+      }
+      accepted.push(...result.rows.slice(0,index));
+      pending = pending.slice(index);
+      if (!stopping()) {
+        const controller = new AbortController();
+        retryWait = controller;
+        progress(`快麦已达到上传任务上限，已受理 ${accepted.length} 条。3 分钟后从规则 ${pending[0]} 继续。`, {retrying:true});
+        try {
+          await waitForRetry(CAPACITY_RETRY_SECONDS * 1000, undefined, {signal:controller.signal});
+        } catch (error) {
+          if (!controller.signal.aborted) throw error;
+        } finally {
+          retryWait = null;
+          progress(controller.signal.aborted ? '已停止等待。' : '等待完成，正在重新核对规则。', {retrying:false});
+        }
+        if (!controller.signal.aborted && !stopping()) continue;
+      }
+      return {complete:false, cancelled:true, error:'已停止重试，已受理规则已保留。',
+        rows:[...accepted, ...pending.map(number => ({number,status:'未处理'}))]};
+    }
+  }
+
+  const schedule = createErpStockSchedule({file:path.join(root, 'schedule.json'), execute:runUpload, notify:notifySchedule});
   const describeRules = rules => rules.map(rule => `${rule.number}. ${rule.name}（优先级 ${rule.priority} · ${rule.created_at}）`).join('\n');
 
   return {
@@ -79,7 +125,7 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
       const {fingerprint, session} = catalog;
       catalog = null;
       try {
-        return await execute({action: 'upload', numbers, fingerprint, session});
+        return await runUpload({action: 'upload', numbers, fingerprint, session});
       } catch (error) {
         throw Error(`${error.message}\n如有规则已点击确定，请先在快麦核对结果，再刷新清单。`);
       }
@@ -91,7 +137,17 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
     scheduleStatus: schedule.status,
     scheduleDue: schedule.isDue,
     runScheduled: schedule.runDue,
-    cancelSchedule: schedule.cancel,
+    cancelSchedule() {
+      const state = schedule.cancel();
+      if (state.state === 'stopping') retryWait?.abort();
+      return state;
+    },
+    cancelRetry() {
+      if (!retryWait) return false;
+      if (schedule.status()?.state === 'running') schedule.cancel();
+      retryWait.abort();
+      return true;
+    },
     updateScheduleInterval: schedule.updateInterval,
     async saveSchedule(numbers, value, unit) {
       if (!catalog) throw Error('请先读取库存规则。');
