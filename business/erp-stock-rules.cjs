@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const {readFileSync, mkdirSync, writeFileSync, renameSync} = require('node:fs');
 const path = require('node:path');
 const {setTimeout: delay} = require('node:timers/promises');
 const {runtimePaths, runPython} = require('./monthly.cjs');
@@ -6,6 +7,32 @@ const {createErpStockSchedule, parseInterval} = require('./erp-stock-schedule.cj
 
 const ERP_ORIGIN = 'https://erpa.superboss.cc';
 const CAPACITY_RETRY_SECONDS = 180;
+
+function ruleKey(rule) {
+  return JSON.stringify([rule.name, String(rule.priority), rule.created_at]);
+}
+
+function restoreSelection(file, rules) {
+  let saved;
+  try {
+    saved = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return rules;
+  }
+  if (!Array.isArray(saved) || !saved.length) return rules;
+  const preferred = new Set(saved);
+  const counts = new Map();
+  for (const rule of rules) {
+    const key = ruleKey(rule);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return rules.map(rule => {
+    const key = ruleKey(rule);
+    return rule.manual_status === '启用' && preferred.has(key) && counts.get(key) === 1
+      ? {...rule, selected: true}
+      : rule;
+  });
+}
 
 function selectedRules(rules, numbers) {
   if (!Array.isArray(numbers) || !numbers.length || new Set(numbers).size !== numbers.length ||
@@ -35,6 +62,7 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
   runner = runPython, waitForRetry = delay}) {
   const root = path.join(app.getPath('userData'), 'erp-stock-rules');
   const output = path.join(root, '全部上传规则.csv');
+  const selection = path.join(root, 'last-selection.json');
   const home = app.getPath('home');
   const support = process.platform === 'win32'
     ? process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local')
@@ -103,7 +131,17 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
     async list() {
       catalog = null;
       catalog = await execute({action: 'list', output});
-      return catalog.rules;
+      return restoreSelection(selection, catalog.rules);
+    },
+    saveSelection(numbers) {
+      if (!catalog) throw Error('请先读取库存规则。');
+      const keys = Array.isArray(numbers) && numbers.length === 0
+        ? []
+        : selectedRules(catalog.rules, numbers).map(ruleKey);
+      mkdirSync(root, {recursive:true,mode:0o700});
+      const temporary = selection + '.tmp';
+      writeFileSync(temporary, JSON.stringify(keys), {mode:0o600,flush:true});
+      renameSync(temporary, selection);
     },
     async preview(numbers) {
       if (!catalog) throw Error('请先读取库存规则。');

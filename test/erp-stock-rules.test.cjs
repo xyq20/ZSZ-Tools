@@ -75,6 +75,34 @@ test('a schedule uses the approved rules and never starts an immediate upload', 
   assert.equal(tool.cancelSchedule().state,'cancelled');
 });
 
+test('last checked rules survive restart and follow unique enabled identities after reordering', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'erp-stock-selection-'));
+  t.after(() => fs.rm(root, {force:true,recursive:true}));
+  const first={name:'同名',priority:'34',manual_status:'启用',created_at:'2026-01-02 10:00:00'};
+  const retained={...first,priority:'49',created_at:'2026-01-03 10:00:00'};
+  const disabled={...first,name:'停用测试'};
+  const removed={...first,name:'删除测试'};
+  const ambiguous={...first,name:'重复测试'};
+  let rules=[first,retained,disabled,removed,ambiguous];
+  const makeTool=()=>createErpStockRulesTool({
+    app:{getPath:()=>root},getCookies:async()=>[],progress:()=>{},
+    runner:async(_paths,job)=>{
+      assert.equal(job.action,'list');
+      return {rules:rules.map((rule,index)=>({...rule,number:index+1}))};
+    },
+  });
+  const initial=makeTool();
+  assert.throws(()=>initial.saveSelection([2]),/先读取/);
+  await initial.list();
+  initial.saveSelection([2,3,4,5]);
+  rules=[retained,first,{...disabled,manual_status:'停用'},ambiguous,ambiguous];
+  const restarted=makeTool();
+  const refreshed=await restarted.list();
+  assert.deepEqual(refreshed.filter(rule=>rule.selected).map(rule=>rule.number),[1]);
+  restarted.saveSelection([]);
+  assert.equal((await makeTool().list()).some(rule=>rule.selected),false);
+});
+
 function limited(numbers, index) {
   const status = position => position < index ? '快麦已受理' : position === index ? '等待重试' : '未处理';
   return {complete:false, retry:{code:'20030013',number:numbers[index],seconds:180},

@@ -111,6 +111,7 @@ function setupBusiness(win,app){
   handle('business-erp-stock-rules-'+action,(...args)=>exclusive(()=>erpStockRules[method](...args)));
  handle('business-erp-stock-rules-schedule-cancel',erpStockRules.cancelSchedule);
  handle('business-erp-stock-rules-retry-cancel',erpStockRules.cancelRetry);
+ handle('business-erp-stock-rules-selection-save',erpStockRules.saveSelection);
  registerReadOnly({ipcMain,win,redact},'business-erp-stock-rules-schedule-status',erpStockRules.scheduleStatus);
  const stockScheduleContext={tool:'erp-stock-rules',action:'erp-stock-rules-scheduled'};
  const stockScheduleTimer=setInterval(()=>{

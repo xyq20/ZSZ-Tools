@@ -271,7 +271,8 @@ async function loadErpSchedule(){
  try{renderErpSchedule(await call('erp-stock-rules-schedule-status'));}
  catch(error){erpRuleField('schedule-status').hidden=false;erpRuleField('schedule-status').textContent=error.message;}
 }
-function renderErpRules(){
+function renderErpRules(numbers=erpRules.filter(rule=>rule.selected).map(rule=>rule.number)){
+ const selected=new Set(numbers);
  table('erp-stock-rules-table',['选择','编号','规则名称','优先级','手动上传','生效','创建时间','本批结果'],
   erpRules.map(rule=>['',rule.number,rule.name,rule.priority,rule.manual_status,rule.effective_status,rule.created_at,rule.result]));
  const rows=erpRuleField('table').querySelectorAll('tbody tr');
@@ -279,6 +280,7 @@ function renderErpRules(){
   const input=document.createElement('input');
   input.type='checkbox';
   input.value=rule.number;
+  input.checked=selected.has(rule.number);
   input.dataset.manual=rule.manual_status;
   input.setAttribute('aria-label',`选择 ${rule.name}，优先级 ${rule.priority}`);
   rows[index].firstElementChild.append(input);
@@ -288,6 +290,9 @@ erpRuleField('search').addEventListener('input',filterErpRules);
 erpRuleField('table').addEventListener('change',()=>{
  filterErpRules();
  refreshActions();
+ if(erpRulesReady)call('erp-stock-rules-selection-save',checkedErpRules()).catch(error=>{
+  erpRuleField('progress').textContent='本次勾选未能保存。'+error.message;
+ });
 });
 erpRuleField('list').addEventListener('click',()=>run('erp-stock-rules',async()=>{
  erpRules=null;erpRulesReady=false;
@@ -314,10 +319,7 @@ for(const action of ['preview','upload']){
    if(erpRulesSubmitted)erpRulesReady=false;
    const statuses=new Map(result.rows.map(item=>[item.number,item.status]));
    for(const rule of erpRules)rule.result=statuses.get(rule.number)||'';
-   renderErpRules();
-   if(!erpRulesSubmitted){
-    for(const input of erpRuleField('table').querySelectorAll('input'))input.checked=numbers.includes(Number(input.value));
-   }
+   renderErpRules(numbers);
    filterErpRules();
    erpRuleField('progress').textContent=result.complete
     ? action==='upload'?`快麦已受理 ${result.rows.length} 条规则。`:`已预览 ${result.rows.length} 条规则，确认框均已取消。`

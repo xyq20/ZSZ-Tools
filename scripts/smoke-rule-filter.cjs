@@ -20,7 +20,7 @@ async function check() {
     });`);
   await fs.writeFile(main,`const {app,BrowserWindow,ipcMain}=require('electron');
     app.setPath('userData',${JSON.stringify(dir)});
-    const rules=${JSON.stringify(rules)}; global.selections=[]; global.scheduled=null;
+    const rules=${JSON.stringify(rules)}; global.selections=[]; global.scheduled=null; let remembered=[];
     ipcMain.handle('fixture',(_event,id,numbers,count,unit)=>{
       let data=null;
       if(id==='ops-snapshot')data={generatedAt:'2026-11-24T06:05:00Z',processStartedAt:'2026-11-24T06:00:00Z',
@@ -28,7 +28,8 @@ async function check() {
           {id:'fixture-task',at:'2026-11-24T06:03:00Z',tool:'report',action:'report-query',step:'查询月份',ms:240,code:'ETIMEDOUT',message:'请求超时'},
           {at:'2026-11-23T06:00:00Z',action:'price-save',message:'旧版错误'}],
         logs:{events:'2026-11-24T06:03:00.000Z · 自动 · 0.4.63 · checking → current · 处理耗时 737 ms',installTarget:'0.4.63',install:'已确认主窗口'},tools:{taobao:{records:{unknown:1}}},runtime:{}};
-      if(id==='erp-stock-rules-list')data=rules;
+      if(id==='erp-stock-rules-list')data=rules.map(rule=>({...rule,selected:remembered.includes(rule.number)}));
+      if(id==='erp-stock-rules-selection-save')remembered=numbers;
       if(id==='erp-stock-rules-preview'){global.selections.push(numbers);data={complete:true,rows:numbers.map(number=>({number,status:'已核对并取消'}))};}
       if(id==='erp-stock-rules-schedule-status')data=global.scheduled;
       if(id==='erp-stock-rules-schedule-save'){
@@ -135,6 +136,10 @@ async function check() {
     assert.equal(await first.count(),4);
     assert(await first.nth(1).isChecked());
     assert(await first.nth(2).isDisabled());
+    assert(await first.nth(3).isChecked());
+    await page.getByRole('button',{name:'读取规则',exact:true}).click();
+    await page.getByText(/已选 2 条/).first().waitFor();
+    assert(await first.nth(1).isChecked());
     assert(await first.nth(3).isChecked());
     const schedule=page.getByRole('button',{name:'启用循环上传',exact:true});
     const updateInterval=page.getByRole('button',{name:'更新间隔',exact:true});
