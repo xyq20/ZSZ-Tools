@@ -1,6 +1,6 @@
 {
   "name": "team-toolkit",
-  "version": "0.4.58",
+  "version": "0.4.59",
   "private": true,
   "main": "bootstrap.cjs",
   "scripts": {
@@ -26,6 +26,7 @@
   "build": {
     "appId": "local.team.toolkit",
     "productName": "钊叔工具箱",
+    "artifactBuildCompleted": "scripts/verify-mac-dmg.cjs",
     "afterPack": "scripts/pack-taobao-reminder-defaults.cjs",
     "electronLanguages": [
       "zh-CN",
@@ -49,6 +50,8 @@
       "!business/erp-stock-rules-python/**/*"
     ],
     "mac": {
+      "identity": "-",
+      "notarize": false,
       "extendInfo": {
         "CFBundleDevelopmentRegion": "zh_CN",
         "CFBundleLocalizations": [
