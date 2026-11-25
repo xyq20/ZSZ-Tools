@@ -109,18 +109,18 @@ function limited(numbers, index) {
     rows:numbers.map((number,position)=>({number,status:status(position)}))};
 }
 
-async function retryFixture(t, upload, waitForRetry) {
+async function retryFixture(t, upload, waitForRetry, progress = () => {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'erp-stock-capacity-'));
   t.after(() => fs.rm(root, {force:true,recursive:true}));
   const rules = Array.from({length:7}, (_,index)=>({number:index+1,name:`规则 ${index+1}`,
     priority:String(index+1),manual_status:'启用',created_at:'2026-01-01 00:00:00'}));
-  const tool = createErpStockRulesTool({app:{getPath:()=>root},getCookies:async()=>[],progress:()=>{},
+  const tool = createErpStockRulesTool({app:{getPath:()=>root},getCookies:async()=>[],progress,
     dialog:{showMessageBox:async()=>({response:1})},waitForRetry,
-    runner:async(_paths,job)=>{
+    runner:async(_paths,job,onProgress)=>{
       if(job.action==='list')return {rules,fingerprint:'catalog',session:'session'};
       assert.equal(job.fingerprint,'catalog');
       assert.equal(job.session,'session');
-      return upload(job.numbers);
+      return upload(job.numbers,onProgress);
     },
   });
   await tool.list();
@@ -130,17 +130,40 @@ async function retryFixture(t, upload, waitForRetry) {
 test('capacity retry waits three minutes per rejection and resumes at the failed rule', async t => {
   const attempts = [];
   const waits = [];
-  const {tool,numbers} = await retryFixture(t, pending=>{
+  const events = [];
+  const {tool,numbers} = await retryFixture(t, (pending,onProgress)=>{
     attempts.push(pending);
+    if(attempts.length===1)onProgress({message:'已受理第 1 条',row:{number:1,status:'快麦已受理'}});
     if(attempts.length===1)return limited(pending,5);
     if(attempts.length===2)return limited(pending,0);
     return {complete:true,rows:pending.map(number=>({number,status:'快麦已受理'}))};
-  }, async ms=>{waits.push(ms);});
+  }, async ms=>{waits.push(ms);}, (_message,batch)=>events.push(batch.ruleBatch));
   const result=await tool.upload(numbers);
   assert.deepEqual(attempts,[numbers,[6,7],[6,7]]);
   assert.deepEqual(waits,[180000,180000]);
   assert.equal(result.complete,true);
   assert.deepEqual(result.rows,numbers.map(number=>({number,status:'快麦已受理'})));
+  assert(events.some(event=>event.phase==='running'&&event.done===1&&event.total===7));
+  assert.deepEqual(events.filter(event=>event.phase==='waiting').map(event=>[event.done,event.total]),[[5,7],[5,7]]);
+  assert.deepEqual(events.at(-1),{action:'upload',done:7,total:7,phase:'complete'});
+});
+
+test('session change stops the batch and keeps the accepted count', async t => {
+  const events=[];
+  let attempts=0;
+  const {tool}=await retryFixture(t, (numbers,onProgress)=>{
+    attempts++;
+    const rows=numbers.map((number,index)=>({number,status:index<4?'快麦已受理':index===4?'未提交':'未处理'}));
+    for(const row of rows.slice(0,5))onProgress({message:row.status,row});
+    return {complete:false,rows,error:'快麦会话已变化，请重新读取规则。'};
+  }, ()=>assert.fail('session changes must not retry'), (message,batch)=>events.push({message,...batch.ruleBatch}));
+  const result=await tool.upload([1,2,3,4,5,6]);
+  assert.equal(attempts,1);
+  assert.equal(result.rows[4].status,'未提交');
+  assert.equal(result.rows[5].status,'未处理');
+  assert.deepEqual(events.slice(0,5).map(event=>event.done),[0,1,2,3,4]);
+  assert.equal(events.at(-1).phase,'stopped');
+  assert.match(events.at(-1).message,/已受理 4\/6.*会话已变化/);
 });
 
 test('stopping a capacity wait keeps prior results and performs no retry', async t => {

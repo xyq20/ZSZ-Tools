@@ -165,7 +165,7 @@ async function run(tool,fn){
 function table(target,headers,rows,totals){const root=document.getElementById(target);root.replaceChildren();const t=document.createElement('table'),head=document.createElement('thead'),tr=document.createElement('tr');headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;tr.append(th);});head.append(tr);t.append(head);const body=document.createElement('tbody');for(const row of rows){const r=document.createElement('tr');for(const value of row){const cell=document.createElement('td');cell.textContent=value??'';r.append(cell);}body.append(r);}t.append(body);if(totals){const foot=document.createElement('tfoot'),r=document.createElement('tr');totals.forEach((value,i)=>{const cell=document.createElement(i===0?'th':'td');if(i===0)cell.scope='row';cell.textContent=value;r.append(cell);});foot.append(r);t.append(foot);}root.append(t);}
 window.desktop?.onProgress(({ tool, message, batch }) => {
   if(tool==='erp-stock-rules'&&batch?.schedule){renderErpSchedule(batch.schedule);return;}
-  if(tool==='erp-stock-rules'&&typeof batch?.retrying==='boolean')erpRuleField('retry-cancel').hidden=!batch.retrying;
+  if(tool==='erp-stock-rules'&&batch?.ruleBatch)renderErpRuleProgress(batch.ruleBatch);
   diagnostics?.setProgress(tool,message);
   if (tool === 'return-rate' && batch) renderReturnRateProgress(batch);
   if (tool === 'taobao-soutu' && batch) renderSoutuBatch(batch, message);
@@ -195,6 +195,16 @@ refreshActions();
 const returnRateField = name => document.getElementById(`return-rate-${name}`);
 
 function erpRuleField(name){return document.getElementById('erp-stock-rules-'+name);}
+function renderErpRuleProgress({action,total,done,phase}){
+ const bar=erpRuleField('batch-bar');
+ bar.max=total;
+ bar.value=done;
+ erpRuleField('batch-label').textContent=action==='preview'?'预检进度':'上传进度';
+ erpRuleField('batch-count').textContent=`${action==='preview'?'已核对':'快麦已受理'} ${done} / ${total} 条`;
+ erpRuleField('batch').dataset.phase=phase;
+ erpRuleField('batch').hidden=false;
+ erpRuleField('retry-cancel').hidden=phase!=='waiting';
+}
 function checkedErpRules(){
  return [...erpRuleField('table').querySelectorAll('input:checked')].map(input=>Number(input.value));
 }
@@ -296,6 +306,7 @@ erpRuleField('table').addEventListener('change',()=>{
 });
 erpRuleField('list').addEventListener('click',()=>run('erp-stock-rules',async()=>{
  erpRules=null;erpRulesReady=false;
+ erpRuleField('batch').hidden=true;
  erpRuleField('table').replaceChildren();
  erpRuleField('search').value='';
  filterErpRules();
@@ -323,7 +334,7 @@ for(const action of ['preview','upload']){
    filterErpRules();
    erpRuleField('progress').textContent=result.complete
     ? action==='upload'?`快麦已受理 ${result.rows.length} 条规则。`:`已预览 ${result.rows.length} 条规则，确认框均已取消。`
-    : `本批已停止。请查看各规则结果。${result.error||''}`;
+    : `本批已停止。${result.error||'请查看各规则结果。'}${erpRulesSubmitted&&!result.cancelled?' 补传时请核对本批结果，只选择需要补传的规则。':''}`;
   });
  });
 }

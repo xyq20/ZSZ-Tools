@@ -52,7 +52,9 @@ function setupBusiness(win,app){
    try{
     if(updateLocked)throw Error('正在准备重启更新，请稍候');
     const data=await requestContext.run(task,()=>fn(...args));
-    activity.record({action,tool,ok:true,ms:Date.now()-started});
+    const incompleteStockBatch=tool==='erp-stock-rules'&&data?.complete===false&&!data.cancelled;
+    activity.record({action,tool,ok:!incompleteStockBatch,ms:Date.now()-started,
+     ...(incompleteStockBatch&&{step:task.step,error:data.error||'库存规则批次未完成。'})});
     return {ok:true,data};
    }catch(error){
     activity.record({...task,ok:false,ms:Date.now()-started,code:error.code,error:error.message});

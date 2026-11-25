@@ -20,6 +20,10 @@ def announce(message):
     send("progress", {"message": message})
 
 
+def report_row(message, row):
+    send("progress", {"message": message, "row": row})
+
+
 def execute(job):
     action = job["action"]
     if action not in {"list", "preview", "upload"}:
@@ -43,7 +47,8 @@ def execute(job):
         if fingerprint != job["fingerprint"]:
             raise RuntimeError("快麦规则清单已变化，本批未提交。请刷新清单后重新选择。")
         selected = select_rules(rules, job["numbers"])
-        return run_batch(panel, selected, last_page, columns, action == "preview", announce, expected_session=session)
+        return run_batch(panel, selected, last_page, columns, action == "preview", announce,
+                         expected_session=session, on_row=report_row)
 
 
 if __name__ == "__main__":

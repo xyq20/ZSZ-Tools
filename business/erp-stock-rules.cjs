@@ -75,56 +75,82 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
   let catalog = null;
   let retryWait = null;
 
-  async function execute(job) {
+  async function execute(job, onProgress = data => progress(data.message)) {
     const hasExisting = await fs.stat(existing).then(entry => entry.isDirectory(), () => false);
     const profile = hasExisting ? existing : path.join(root, 'chrome');
     const cookies = hasExisting ? [] : chromeCookies(await getCookies(ERP_ORIGIN));
-    return runner(paths, {...job, profile, cookies}, data => progress(data.message), {label: '库存规则'});
+    return runner(paths, {...job, profile, cookies}, onProgress, {label: '库存规则'});
   }
 
-  async function runUpload(job, stopping = () => false) {
+  async function runBatch(job, stopping = () => false) {
+    const {action, numbers} = job;
+    const preview = action === 'preview';
+    const success = preview ? '已核对并取消' : '快麦已受理';
     const accepted = [];
-    let pending = job.numbers;
+    const confirmed = new Set();
+    let pending = numbers;
+    const publish = (message, phase = 'running') => {
+      progress(message, {ruleBatch: {action, total:numbers.length, done:confirmed.size, phase}});
+    };
+    const finish = result => {
+      confirmed.clear();
+      for (const row of result.rows) if (row.status === success) confirmed.add(row.number);
+      const summary = `${preview ? '已核对' : '快麦已受理'} ${confirmed.size}/${numbers.length} 条规则。`;
+      publish(result.complete ? summary : `本批已停止。${summary}${result.error || ''}`, result.complete ? 'complete' : 'stopped');
+      return result;
+    };
+    publish(preview ? '正在准备预检…' : '正在核对快麦会话和规则清单…');
     while (true) {
       let result;
       try {
-        result = await execute({...job, numbers:pending});
+        result = await execute({...job, numbers:pending}, ({message,row}) => {
+          if (row?.status === success && pending.includes(row.number)) confirmed.add(row.number);
+          publish(message);
+        });
       } catch (error) {
-        if (!accepted.length) throw error;
-        return {complete:false, error:error.message,
-          rows:[...accepted, ...pending.map(number => ({number,status:'结果待核实'}))]};
+        if (!confirmed.size || preview) {
+          publish(error.message, 'stopped');
+          throw error;
+        }
+        return finish({complete:false, error:error.message,
+          rows:numbers.map(number => ({number,status:confirmed.has(number) ? success : '结果待核实'}))});
       }
-      if (!result.retry) return {...result, rows:[...accepted, ...result.rows]};
+      if (preview || !result.retry) return finish({...result, rows:[...accepted, ...result.rows]});
       const index = pending.indexOf(result.retry.number);
       if (result.complete || result.retry.code !== '20030013' || result.retry.seconds !== CAPACITY_RETRY_SECONDS ||
           index < 0 || !Array.isArray(result.rows) || result.rows.length !== pending.length ||
           result.rows.some((row, position) => row.number !== pending[position] ||
             row.status !== (position < index ? '快麦已受理' : position === index ? '等待重试' : '未处理'))) {
-        return {complete:false, error:'重试位置与快麦返回结果不符，请先核对。',
-          rows:[...accepted, ...pending.map(number => ({number,status:'结果待核实'}))]};
+        return finish({complete:false, error:'重试位置与快麦返回结果不符，请先核对。',
+          rows:[...accepted, ...pending.map(number => ({number,status:'结果待核实'}))]});
       }
       accepted.push(...result.rows.slice(0,index));
+      for (const row of accepted) confirmed.add(row.number);
       pending = pending.slice(index);
       if (!stopping()) {
         const controller = new AbortController();
         retryWait = controller;
-        progress(`快麦已达到上传任务上限，已受理 ${accepted.length} 条。3 分钟后从规则 ${pending[0]} 继续。`, {retrying:true});
+        publish(`快麦已达到上传任务上限。3 分钟后从规则 ${pending[0]} 继续。`, 'waiting');
         try {
           await waitForRetry(CAPACITY_RETRY_SECONDS * 1000, undefined, {signal:controller.signal});
         } catch (error) {
-          if (!controller.signal.aborted) throw error;
+          if (!controller.signal.aborted) {
+            return finish({complete:false,error:error.message,rows:[...accepted,...pending.map(number=>({number,status:'未处理'}))]});
+          }
         } finally {
           retryWait = null;
-          progress(controller.signal.aborted ? '已停止等待。' : '等待完成，正在重新核对规则。', {retrying:false});
         }
-        if (!controller.signal.aborted && !stopping()) continue;
+        if (!controller.signal.aborted && !stopping()) {
+          publish('等待完成，正在重新核对剩余规则。');
+          continue;
+        }
       }
-      return {complete:false, cancelled:true, error:'已停止重试，已受理规则已保留。',
-        rows:[...accepted, ...pending.map(number => ({number,status:'未处理'}))]};
+      return finish({complete:false, cancelled:true, error:'已停止重试，已受理规则已保留。',
+        rows:[...accepted, ...pending.map(number => ({number,status:'未处理'}))]});
     }
   }
 
-  const schedule = createErpStockSchedule({file:path.join(root, 'schedule.json'), execute:runUpload, notify:notifySchedule});
+  const schedule = createErpStockSchedule({file:path.join(root, 'schedule.json'), execute:runBatch, notify:notifySchedule});
   const describeRules = rules => rules.map(rule => `${rule.number}. ${rule.name}（优先级 ${rule.priority} · ${rule.created_at}）`).join('\n');
 
   return {
@@ -146,7 +172,7 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
     async preview(numbers) {
       if (!catalog) throw Error('请先读取库存规则。');
       selectedRules(catalog.rules, numbers);
-      return execute({action: 'preview', numbers, fingerprint: catalog.fingerprint, session: catalog.session});
+      return runBatch({action: 'preview', numbers, fingerprint: catalog.fingerprint, session: catalog.session});
     },
     async upload(numbers) {
       if (!catalog) throw Error('请先读取库存规则。');
@@ -163,7 +189,7 @@ function createErpStockRulesTool({app, win, dialog, shell, getCookies, progress,
       const {fingerprint, session} = catalog;
       catalog = null;
       try {
-        return await runUpload({action: 'upload', numbers, fingerprint, session});
+        return await runBatch({action: 'upload', numbers, fingerprint, session});
       } catch (error) {
         throw Error(`${error.message}\n如有规则已点击确定，请先在快麦核对结果，再刷新清单。`);
       }

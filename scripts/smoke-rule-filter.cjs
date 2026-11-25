@@ -15,14 +15,18 @@ async function check() {
   const main = path.join(dir,'main.cjs');
   await fs.writeFile(preload,`const {contextBridge,ipcRenderer}=require('electron');
     contextBridge.exposeInMainWorld('desktop',{
-      business:(...args)=>ipcRenderer.invoke('fixture',...args),onBusy:()=>{},onProgress:()=>{},onUpdate:()=>{},
+      business:(...args)=>ipcRenderer.invoke('fixture',...args),onBusy:()=>{},
+      onProgress:callback=>ipcRenderer.on('fixture-progress',(_event,value)=>callback(value)),onUpdate:()=>{},
       updateState:async()=>({status:'idle'}),getVersion:async()=>'0.4.50',mainWindowReady:async()=>{}
     });`);
   await fs.writeFile(main,`const {app,BrowserWindow,ipcMain}=require('electron');
     app.setPath('userData',${JSON.stringify(dir)});
     const rules=${JSON.stringify(rules)}; global.selections=[]; global.scheduled=null; let remembered=[];
-    ipcMain.handle('fixture',(_event,id,numbers,count,unit)=>{
+    ipcMain.handle('fixture',(event,id,numbers,count,unit)=>{
       let data=null;
+      const progress=(action,done,phase,message)=>event.sender.send('fixture-progress',{
+        tool:'erp-stock-rules',message,batch:{ruleBatch:{action,done,total:numbers.length,phase}}
+      });
       if(id==='ops-snapshot')data={generatedAt:'2026-11-24T06:05:00Z',processStartedAt:'2026-11-24T06:00:00Z',
         logins:[],activity:[],errors:[
           {id:'fixture-task',at:'2026-11-24T06:03:00Z',tool:'report',action:'report-query',step:'查询月份',ms:240,code:'ETIMEDOUT',message:'请求超时'},
@@ -30,7 +34,24 @@ async function check() {
         logs:{events:'2026-11-24T06:03:00.000Z · 自动 · 0.4.63 · checking → current · 处理耗时 737 ms',installTarget:'0.4.63',install:'已确认主窗口'},tools:{taobao:{records:{unknown:1}}},runtime:{}};
       if(id==='erp-stock-rules-list')data=rules.map(rule=>({...rule,selected:remembered.includes(rule.number)}));
       if(id==='erp-stock-rules-selection-save')remembered=numbers;
-      if(id==='erp-stock-rules-preview'){global.selections.push(numbers);data={complete:true,rows:numbers.map(number=>({number,status:'已核对并取消'}))};}
+      if(id==='erp-stock-rules-preview'){
+        global.selections.push(numbers);
+        progress('preview',numbers.length,'complete','预检完成');
+        data={complete:true,rows:numbers.map(number=>({number,status:'已核对并取消'}))};
+      }
+      if(id==='erp-stock-rules-upload'){
+        progress('upload',0,'running','正在核对清单');
+        return new Promise(resolve=>{
+          global.waitForRetry=()=>progress('upload',1,'waiting','3 分钟后继续');
+          global.stopUpload=()=>{
+            const error='快麦会话已变化，请重新读取规则。';
+            progress('upload',1,'stopped',error);
+            resolve({ok:true,data:{complete:false,error,rows:[
+              {number:numbers[0],status:'快麦已受理'},{number:numbers[1],status:'未提交'}
+            ]}});
+          };
+        });
+      }
       if(id==='erp-stock-rules-schedule-status')data=global.scheduled;
       if(id==='erp-stock-rules-schedule-save'){
         global.scheduled={state:'pending',count:Number(count),unit,nextAt:Date.now()+30000,rules:numbers.map(number=>rules[number-1])};data=global.scheduled;
@@ -128,6 +149,9 @@ async function check() {
     assert(await first.first().isChecked());
     await page.getByRole('button',{name:'预检所选规则（不上传）'}).click();
     await page.getByText(/已预览 2 条规则/).first().waitFor();
+    const bar=page.getByRole('progressbar',{name:'预检进度'});
+    await bar.waitFor();
+    assert.deepEqual(await bar.evaluate(el=>[el.value,el.max]),[2,2]);
     assert.deepEqual(await desktop.evaluate(()=>global.selections.at(-1)),[2,4]);
     await search.fill('无此规则');
     await page.getByText('没有匹配的规则',{exact:false}).first().waitFor();
@@ -141,6 +165,20 @@ async function check() {
     await page.getByText(/已选 2 条/).first().waitFor();
     assert(await first.nth(1).isChecked());
     assert(await first.nth(3).isChecked());
+    await page.getByRole('button',{name:'上传所选库存（2 条）',exact:true}).click();
+    const uploadBar=page.getByRole('progressbar',{name:'上传进度'});
+    await uploadBar.waitFor();
+    assert.deepEqual(await uploadBar.evaluate(el=>[el.value,el.max]),[0,2]);
+    await desktop.evaluate(()=>global.waitForRetry());
+    await page.getByRole('button',{name:'停止重试',exact:true}).waitFor();
+    assert.deepEqual(await uploadBar.evaluate(el=>[el.value,el.max]),[1,2]);
+    await desktop.evaluate(()=>global.stopUpload());
+    await page.getByText(/本批已停止。快麦会话已变化/).waitFor();
+    assert.deepEqual(await uploadBar.evaluate(el=>[el.value,el.max]),[1,2]);
+    assert(await page.getByRole('button',{name:'停止重试',exact:true}).isHidden());
+    await page.getByRole('button',{name:'读取规则',exact:true}).click();
+    await page.getByText(/已选 2 条/).first().waitFor();
+    assert(await uploadBar.isHidden());
     const schedule=page.getByRole('button',{name:'启用循环上传',exact:true});
     const updateInterval=page.getByRole('button',{name:'更新间隔',exact:true});
     const cancel=page.getByRole('button',{name:'停止循环',exact:true});

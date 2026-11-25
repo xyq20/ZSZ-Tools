@@ -355,13 +355,23 @@ def remaining_rows(selected, start):
     return [{"number": number, "status": "未处理"} for number, _ in selected[start:]]
 
 
-def run_batch(panel, selected, current_page, columns, preview, announce=print, *, expected_session=None):
+def run_batch(panel, selected, current_page, columns, preview, announce=print, *, expected_session=None, on_row=None):
     page = panel.page
     success = page.locator(".el-message--success:visible").get_by_text("操作成功", exact=True)
     capacity_alert = page.get_by_role("dialog").filter(has_text="已达到库存上传任务上限").filter(
         has_text=re.compile(rf"类型码\s*[：:]\s*{UPLOAD_LIMIT_CODE}\b")
     )
     results = []
+
+    def record(number, rule, status):
+        row = {"number": number, "status": status}
+        results.append(row)
+        message = f"{number:2}. {rule.description} · {status}"
+        if on_row is None:
+            announce(message)
+        else:
+            on_row(message, row)
+
     for index, (number, rule) in enumerate(selected):
         announce(f"正在处理 {index + 1}/{len(selected)} · {rule.description}")
         confirmation_started = False
@@ -386,13 +396,11 @@ def run_batch(panel, selected, current_page, columns, preview, announce=print, *
                         "retry": {"code": UPLOAD_LIMIT_CODE, "number": number, "seconds": CAPACITY_RETRY_SECONDS},
                     }
                 status = "快麦已受理"
-            results.append({"number": number, "status": status})
-            announce(f"{number:2}. {rule.description} · {status}")
+            record(number, rule, status)
         except (Error, AssertionError, RuntimeError, KeyboardInterrupt) as exc:
             status = "结果待核实" if confirmation_started else "未提交"
-            results.append({"number": number, "status": status})
+            record(number, rule, status)
             results.extend(remaining_rows(selected, index + 1))
-            announce(f"{number:2}. {rule.description} · {status}")
             detail = str(exc).splitlines() or ["操作中断"]
             return {"complete": False, "rows": results, "error": detail[0]}
     return {"complete": True, "rows": results}
