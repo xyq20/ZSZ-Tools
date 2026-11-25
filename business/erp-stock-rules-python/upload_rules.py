@@ -26,12 +26,11 @@ RULES_ROUTE = "/index.html#/stock/new_rule/"
 RULES_URL = "https://erpa.superboss.cc" + RULES_ROUTE
 LIST_REQUEST = "/stock/upload/newRule/ruleList"
 UPLOAD_REQUEST = "/stock/upload/newRule/manual"
+ACCOUNT_REQUEST = "/user/info"
+ACCOUNT_FINGERPRINT_PREFIX = "erp-account-v1:"
 UPLOAD_LIMIT_CODE = "20030013"
 CAPACITY_RETRY_SECONDS = 180
 CSV_PATH = ROOT / "output" / "全部上传规则.csv"
-# These page cookies rotate when Chrome reopens while the authenticated ERP
-# session remains the same. Chrome still sends them in its normal requests.
-VOLATILE_PAGE_COOKIES = {(".superboss.cc", "_pdd_page_code"), (".superboss.cc", "tfstk")}
 
 
 @dataclass(frozen=True)
@@ -74,6 +73,34 @@ def toolkit_debug_browser(playwright, profile):
     return None
 
 
+def is_rules_page(url):
+    parts = urlsplit(url)
+    return (
+        parts.scheme == "https" and parts.hostname in ERP_HOSTS
+        and parts.path == "/index.html" and parts.fragment.startswith("/stock/new_rule/")
+    )
+
+
+def browser_page(context, *, owns_browser):
+    pages = context.pages
+    existing = next((tab for tab in pages if is_rules_page(tab.url)), None)
+    if existing:
+        if owns_browser:
+            # The dedicated profile can contain a blank tab restored from a previous run.
+            for tab in pages:
+                if tab.url == "about:blank" and tab.opener() is None:
+                    tab.close()
+        existing.bring_to_front()
+        return existing, False
+    if owns_browser:
+        blank = next((tab for tab in pages if tab.url in {
+            "about:blank", "chrome://newtab/", "chrome://new-tab-page/",
+        }), None)
+        if blank:
+            return blank, False
+    return context.new_page(), True
+
+
 @contextmanager
 def open_browser(profile=None, announce=print):
     profile = profile or ROOT / ".runtime" / "chrome"
@@ -81,11 +108,11 @@ def open_browser(profile=None, announce=print):
     with sync_playwright() as playwright:
         browser = toolkit_debug_browser(playwright, profile)
         if browser:
-            page = browser.contexts[0].new_page()
+            page, created = browser_page(browser.contexts[0], owns_browser=False)
             try:
                 yield page
             finally:
-                if not page.is_closed():
+                if created and not page.is_closed():
                     page.close()
             return
 
@@ -95,21 +122,16 @@ def open_browser(profile=None, announce=print):
                 channel="chrome",
                 headless=False,
                 no_viewport=True,
-                ignore_default_args=["--use-mock-keychain", "--password-store=basic"],
+                ignore_default_args=["--use-mock-keychain", "--password-store=basic", "about:blank"],
                 args=["--start-maximized", "--restore-last-session"],
             )
         except Error as exc:
             raise RuntimeError("无法打开快麦专用 Chrome。请检查 Chrome 是否已安装，以及快麦专用窗口是否正被其他任务占用。") from exc
-        page = next((tab for tab in context.pages if tab.url == "about:blank"), None)
-        page = page or context.new_page()
         try:
+            page, _ = browser_page(context, owns_browser=True)
             yield page
         finally:
-            try:
-                if not page.is_closed() and len(context.pages) > 1:
-                    page.close()
-            finally:
-                context.close()
+            context.close()
 
 
 def matches_request(response, path):
@@ -139,7 +161,10 @@ def reach_rules_page(page, announce=print, saved_cookies=(), *, allow_login=True
     deadline = time.monotonic() + 180
     page.on("response", on_response)
     try:
-        page.goto(RULES_URL, wait_until="domcontentloaded", timeout=30_000)
+        if is_rules_page(page.url):
+            page.reload(wait_until="domcontentloaded", timeout=30_000)
+        else:
+            page.goto(RULES_URL, wait_until="domcontentloaded", timeout=30_000)
         while time.monotonic() < deadline:
             parts = urlsplit(page.url)
             if parts.scheme == "https" and parts.hostname in ERP_HOSTS:
@@ -263,13 +288,32 @@ def catalog_fingerprint(rules, url):
 
 def session_fingerprint(page):
     origin = urlsplit(page.url)
-    url = f"{origin.scheme}://{origin.netloc}{LIST_REQUEST}"
-    cookies = sorted(
-        (item["domain"], item["path"], item["name"], item["value"])
-        for item in page.context.cookies(url)
-        if (item["domain"], item["name"]) not in VOLATILE_PAGE_COOKIES
-    )
-    return hashlib.sha256(json.dumps([origin.hostname, cookies], ensure_ascii=False).encode()).hexdigest()
+    if origin.scheme != "https" or origin.hostname not in ERP_HOSTS or origin.path != "/index.html":
+        raise RuntimeError("快麦登录已失效或页面已离开，请重新读取规则。")
+    # Ask the ERP for the authenticated account. Browser cookies can rotate
+    # during a valid session. Only the identifiers leave the page context.
+    try:
+        account = page.evaluate("""
+            async endpoint => {
+                const response = await fetch(endpoint, {
+                    cache: 'no-store', mode: 'same-origin', credentials: 'same-origin',
+                    redirect: 'error', signal: AbortSignal.timeout(8000),
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                });
+                if (!response.ok) return null;
+                const {result, data} = await response.json();
+                const positiveId = value =>
+                    (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) ||
+                    (typeof value === 'string' && /^[1-9][0-9]*$/.test(value));
+                if (result !== 1 || !positiveId(data?.companyId) || !positiveId(data?.id)) return null;
+                return [String(data.companyId), String(data.id)];
+            }
+        """, ACCOUNT_REQUEST)
+    except Error:
+        raise RuntimeError("暂时无法从快麦核对当前账号，已暂停提交。请重新读取规则。") from None
+    if account is None:
+        raise RuntimeError("快麦未返回有效的账号信息，已暂停提交。请重新读取规则并确认登录。")
+    return ACCOUNT_FINGERPRINT_PREFIX + hashlib.sha256(json.dumps([origin.hostname, *account]).encode()).hexdigest()
 
 
 def rule_identity(rule):
@@ -378,16 +422,14 @@ def run_batch(panel, selected, current_page, columns, preview, announce=print, *
         try:
             expect(success).to_have_count(0, timeout=8000)
             current_page = go_to_page(panel, current_page, rule.page_number)
-            if expected_session is not None and session_fingerprint(page) != expected_session:
-                raise RuntimeError("快麦会话已变化，请重新读取规则。")
             dialog = rule_dialog(panel, rule, columns)
+            if expected_session is not None and session_fingerprint(page) != expected_session:
+                raise RuntimeError("快麦登录账号已变化，请重新读取规则。")
             if preview:
                 dialog.get_by_role("button", name="取消", exact=True).click()
                 expect(dialog).to_be_hidden()
                 status = "已核对并取消"
             else:
-                if expected_session is not None and session_fingerprint(page) != expected_session:
-                    raise RuntimeError("快麦会话已变化，请重新读取规则。")
                 confirmation_started = True
                 if not confirm_upload(page, dialog, success, capacity_alert):
                     return {
@@ -451,7 +493,6 @@ def main():
                 selected = selected[start:]
                 print(f"快麦已达到上传任务上限。等待 3 分钟后从第 {retry['number']} 条规则继续。", flush=True)
                 time.sleep(retry["seconds"])
-                page.goto("about:blank")
                 panel = reach_rules_page(page, allow_login=False)
                 current_rules, columns, last_page = collect_rules(panel)
                 if approved_session != session_fingerprint(page) or approved_catalog != catalog_fingerprint(current_rules, page.url):
