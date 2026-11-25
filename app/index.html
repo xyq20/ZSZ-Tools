@@ -216,39 +216,51 @@
   </details>
 </section>
 <section id="erp-stock-rules" hidden>
-  <h1>库存规则批量上传</h1><p>按名称或编号筛选，再勾选需要执行的规则。预检会核对快麦确认框并自动取消。</p>
-  <div class="toolbar">
-    <button id="erp-stock-rules-list" data-job>读取规则</button>
-    <button id="erp-stock-rules-preview" data-job disabled>预检所选规则（不上传）</button>
-    <button id="erp-stock-rules-upload" data-job disabled>上传所选库存</button>
-    <button id="erp-stock-rules-reveal" data-job disabled>显示清单文件</button>
+  <div class="erp-rules-heading">
+    <h1>库存规则批量上传</h1>
+    <p>预检会打开快麦确认框并自动取消。</p>
   </div>
-  <div class="rule-filter">
-    <label>循环间隔<input id="erp-stock-rules-schedule-count" type="number" min="1" step="1" value="30" data-job></label>
-    <select id="erp-stock-rules-schedule-unit" aria-label="间隔单位" data-job>
-      <option value="seconds">秒</option><option value="minutes" selected>分钟</option><option value="hours">小时</option>
-    </select>
-    <button id="erp-stock-rules-schedule-save" type="button" data-job disabled>启用循环上传</button>
-    <button id="erp-stock-rules-schedule-interval" type="button" data-job hidden disabled>更新间隔</button>
-    <button id="erp-stock-rules-schedule-cancel" type="button" hidden disabled>停止循环</button>
+  <div class="erp-rules-controls">
+    <div class="toolbar">
+      <button id="erp-stock-rules-list" data-job>读取规则</button>
+      <button id="erp-stock-rules-preview" data-job disabled>预检所选规则（不上传）</button>
+      <button id="erp-stock-rules-upload" data-job disabled>上传所选库存</button>
+      <button id="erp-stock-rules-reveal" data-job disabled>显示清单文件</button>
+    </div>
+    <div class="erp-rules-schedule-controls">
+      <label>循环间隔<input id="erp-stock-rules-schedule-count" type="number" min="1" step="1" value="30" data-job></label>
+      <select id="erp-stock-rules-schedule-unit" aria-label="间隔单位" data-job>
+        <option value="seconds">秒</option><option value="minutes" selected>分钟</option><option value="hours">小时</option>
+      </select>
+      <button id="erp-stock-rules-schedule-save" type="button" data-job disabled>启用循环上传</button>
+      <button id="erp-stock-rules-schedule-interval" type="button" data-job hidden disabled>更新间隔</button>
+      <button id="erp-stock-rules-schedule-cancel" type="button" hidden disabled>停止循环</button>
+    </div>
   </div>
-  <p class="hint">按设定间隔启动一轮，每轮上传全部勾选的规则。上一轮仍在执行时跳过重叠轮次。请保持电脑唤醒、工具箱运行及快麦登录。</p>
+  <p class="hint">每轮上传全部勾选规则，自动跳过重叠轮次。请保持电脑唤醒、工具箱运行及快麦登录。</p>
   <p id="erp-stock-rules-schedule-status" role="status" hidden></p>
-  <ul id="erp-stock-rules-schedule-rules" hidden></ul>
-        <div id="erp-stock-rules-batch" hidden>
-          <div class="update-progress-heading">
-            <span id="erp-stock-rules-batch-label">库存规则进度</span>
-            <strong id="erp-stock-rules-batch-count"></strong>
-          </div>
-          <progress id="erp-stock-rules-batch-bar" max="1" value="0" aria-labelledby="erp-stock-rules-batch-label" aria-describedby="erp-stock-rules-batch-count"></progress>
-        </div>
-        <p id="erp-stock-rules-progress" role="status" aria-live="polite"></p>
-        <button id="erp-stock-rules-retry-cancel" type="button" hidden>停止重试</button>
-        <div id="erp-stock-rules-filter" class="rule-filter" hidden>
-          <label>搜索规则<input id="erp-stock-rules-search" type="search" placeholder="规则名称或编号" autocomplete="off"></label>
-          <span id="erp-stock-rules-count" role="status"></span>
-        </div>
-        <div id="erp-stock-rules-table" class="result-table"></div>
+  <details class="erp-rules-scheduled">
+    <summary>查看循环规则</summary>
+    <ul id="erp-stock-rules-schedule-rules" hidden></ul>
+  </details>
+  <div id="erp-stock-rules-batch" hidden>
+    <div class="update-progress-heading">
+      <span id="erp-stock-rules-batch-label">库存规则进度</span>
+      <strong id="erp-stock-rules-batch-count"></strong>
+    </div>
+    <progress id="erp-stock-rules-batch-bar" max="1" value="0" aria-labelledby="erp-stock-rules-batch-label" aria-describedby="erp-stock-rules-batch-count"></progress>
+  </div>
+  <div class="erp-rules-table-tools">
+    <div id="erp-stock-rules-filter" class="rule-filter" hidden>
+      <label>搜索规则<input id="erp-stock-rules-search" type="search" placeholder="规则名称或编号" autocomplete="off"></label>
+      <span id="erp-stock-rules-count" role="status"></span>
+    </div>
+    <div class="erp-rules-feedback">
+      <p id="erp-stock-rules-progress" role="status" aria-live="polite"></p>
+      <button id="erp-stock-rules-retry-cancel" type="button" hidden>停止重试</button>
+    </div>
+  </div>
+  <div id="erp-stock-rules-table" class="result-table"></div>
 </section>
       <section id="ops" class="page" hidden aria-labelledby="ops-title">
         <div class="a-header">
