@@ -150,7 +150,7 @@ function setupDiagnostics({tools,request,toast}) {
       const row=element('tr'),state=element('td'),actions=element('td');
       state.dataset.state=entry.state;
       state.append(element('strong',loginStates[entry.state]||'待确认'));
-      if (entry.note) state.append(element('p',entry.note));
+      if (entry.note) state.title=entry.note;
       for (const id of related) actions.append(destination(id,toolName(id),'button-text'));
       row.append(element('td',entry.label),state,actions);
       rows.push(row);
@@ -286,7 +286,7 @@ function setupDiagnostics({tools,request,toast}) {
     const successes=(snapshot.activity||[]).filter(row=>row.ok).slice(0,6);
     if(successes.length)lines.push('','本次最近成功操作',...successes.map(row=>
       [format(row.at),toolName(row.tool),actionName(row.action),row.action,Number.isFinite(row.ms)?row.ms+' ms':''].filter(Boolean).join(' · ')));
-    lines.push('','登录与配置',...snapshot.logins.map(entry=>entry.label+' · '+(loginStates[entry.state]||'待确认')),
+    lines.push('','登录与配置',...snapshot.logins.map(entry=>[entry.label,loginStates[entry.state]||'待确认',entry.note].filter(Boolean).join(' · ')),
       ...issues().map(entry=>[entry.name,entry.status,entry.detail].filter(Boolean).join(' · ')));
     if(snapshot.incomplete||snapshotFailed)lines.push('部分项目读取失败或超时，请核对采集时间');
     try {await navigator.clipboard.writeText(lines.join('\n'));toast('已复制诊断信息');}

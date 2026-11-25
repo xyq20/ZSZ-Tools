@@ -246,7 +246,7 @@
       <section id="ops" class="page" hidden aria-labelledby="ops-title">
         <div class="a-header">
           <div><h1 id="ops-title" tabindex="-1">本机诊断</h1><p id="ops-status" role="status"></p></div>
-          <div class="heading-actions"><button type="button" class="button-quiet" id="ops-refresh">重新检测</button><button type="button" id="ops-copy" disabled>一键复制诊断信息</button></div>
+          <div class="heading-actions"><button type="button" class="button-quiet" id="ops-refresh">重新检测</button><button type="button" id="ops-copy" disabled>复制诊断信息</button></div>
         </div>
         <div class="a-overview" id="ops-metrics"></div>
         <div class="a-segment" role="group" aria-label="诊断内容">
@@ -259,19 +259,20 @@
             <div class="panel-heading"><h2 id="queue-title">待处理</h2></div>
             <div id="ops-attention" class="a-task-list"></div>
           </div>
-          <div class="panel a-task-detail" id="ops-task-detail" aria-label="任务详情"></section>
+          <div class="panel a-task-detail" id="ops-task-detail" aria-label="任务详情"></div>
         </div>
         <div id="ops-machine" class="ops-grid" hidden>
           <div class="panel ops-panel" aria-labelledby="ops-now-title">
             <div class="panel-heading"><h2 id="ops-now-title">运行与更新</h2></div><dl id="ops-summary" class="facts"></dl>
           </div>
-          <div class="panel ops-panel" id="ops-install-details" aria-labelledby="ops-log-title" hidden>
-            <div class="panel-heading"><h2 id="ops-log-title">最近一次更新日志</h2></div><pre class="ops-install-log" id="ops-install-log"></pre>
-          </div>
           <div class="panel ops-panel wide" aria-labelledby="ops-logins-title">
-            <div class="panel-heading"><div><h2 id="ops-logins-title">登录与连接配置</h2><p>显示本机保存状态。账号有效性以平台验证结果为准。</p></div></div>
+            <div class="panel-heading"><h2 id="ops-logins-title">登录与连接</h2></div>
             <div class="ops-login-scroll"><table class="ops-table"><thead><tr><th scope="col">连接</th><th scope="col">本机状态</th><th scope="col">相关工具</th></tr></thead><tbody id="ops-logins"></tbody></table></div>
           </div>
+          <details class="panel" id="ops-install-details" hidden>
+            <summary>更新日志</summary>
+            <pre class="ops-install-log" id="ops-install-log" tabindex="0" aria-label="更新日志内容"></pre>
+          </details>
         </div>
       </section>
 <div class="status">● 本地工作台<span>工具内嵌 · 统一入口</span></div></main><div role="status" id="toast" hidden></div><dialog id="update-dialog" aria-labelledby="update-title"><h2 id="update-title">检查更新</h2><p id="update-status" role="status" aria-live="polite"></p><div id="update-download-progress" hidden><div class="update-progress-heading"><span id="update-progress-label">下载进度</span><strong id="update-percent">0%</strong></div><progress id="update-progress-bar" max="100" value="0" aria-labelledby="update-progress-label"></progress><div id="update-transfer-detail"></div></div><details id="update-notes-details" hidden><summary>更新日志</summary><pre id="update-notes"></pre></details><div class="dialog-actions"><button id="close-update">关闭</button><button id="cancel-update" hidden>取消下载</button><button id="download-update" hidden>下载更新</button><button id="install-update" hidden>重启更新</button></div></dialog><script src="diagnostics.js"></script><script src="ui.js"></script></body></html>

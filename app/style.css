@@ -125,3 +125,26 @@ dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radiu
 #ops dd{margin:0;overflow-wrap:anywhere}#ops .ops-login-scroll{overflow:auto}
 #ops .ops-install-log{white-space:pre-wrap;overflow-wrap:anywhere}
 #erp-stock-rules-table{overflow:auto;max-height:58vh}#erp-stock-rules-table th{position:sticky;top:0;background:#f2f5f3}
+
+#ops .a-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+#ops .a-header h1,#ops .a-header p,#ops .heading-actions{margin:0}
+#ops .a-header p{margin-top:4px;font-size:12px}
+#ops .heading-actions button,#ops .a-segment button{padding:7px 12px;font-size:13px}
+#ops .button-quiet{color:#526575;background:#edf0f3}
+#ops .a-overview{color:#637286;font-size:12px;gap:20px}
+#ops .a-segment{margin:16px 0 12px}
+#ops .ops-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+#ops .panel h2{font-size:15px;margin:0 0 8px}
+#ops .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:0 20px;margin:0}
+#ops .facts div{align-items:baseline;border:0;padding:5px 0;font-size:12px}
+#ops .facts dt{color:#637286;min-width:5em}
+#ops .ops-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+#ops .ops-table :is(th,td){padding:6px 10px;border-bottom:1px solid #edf0f5}
+#ops .ops-table th{color:#637286;background:#f5f6f8;font-weight:500}
+#ops .ops-table tr:last-child td{border-bottom:0}
+#ops .ops-table strong{font-weight:500}
+#ops .button-text{color:#257750;background:transparent;font-size:12px;padding:4px 6px}
+#ops .button-text:hover{text-decoration:underline;background:#edf5f0}
+#ops details.panel{padding:0}
+#ops summary{padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600}
+#ops .ops-install-log{margin:0;padding:10px 14px;max-height:210px;overflow:auto;border-top:1px solid #edf0f5;color:#526575;font-size:12px;line-height:1.6}
