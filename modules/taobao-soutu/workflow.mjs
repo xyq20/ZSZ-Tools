@@ -1,4 +1,4 @@
-import { lstat, mkdir, open, readdir, rename, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, rename, rmdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { COMPLETED_DIRECTORY, prepareImages, productKey, scanMaterials, selectProductId } from './materials.mjs';
@@ -84,18 +84,79 @@ export async function archivesFor(config, groups, resolved) {
     if (names.length !== 1) throw new Error(`无法确定归档所需的原目录「${keyword}」`);
     const original = join(config.source, names[0].name);
     const destination = join(config.source, COMPLETED_DIRECTORY, names[0].name);
-    await assertArchiveDestination(destination);
+    await archiveDirectory(destination);
     result.set(keyword, { jobs, original, destination });
   }
   return result;
 }
 
-async function assertArchiveDestination(path) {
-  const existing = await lstat(path).catch(error => {
+async function fileAt(path) {
+  return lstat(path).catch(error => {
     if (error.code === 'ENOENT') return null;
     throw error;
   });
-  if (existing) throw new Error(`归档目录已有同名文件：${path}`);
+}
+
+async function archiveDirectory(path) {
+  const existing = await fileAt(path);
+  if (existing && !existing.isDirectory()) throw new Error(`归档位置不是实体目录：${path}`);
+  return existing;
+}
+
+const groupOrder = new Intl.Collator('zh-CN', { numeric: true });
+const groupNumber = /^\d+$/;
+const folderMetadata = /^(?:\.DS_Store|Thumbs\.db|desktop\.ini)$/i;
+
+async function mergeArchive(original, destination) {
+  const archived = await readdir(destination);
+  const entries = await readdir(original, { withFileTypes: true });
+  const groups = entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+    .sort((a, b) => groupOrder.compare(a.name, b.name));
+  let nextGroup = 3n;
+  for (const name of archived) {
+    if (groupNumber.test(name) && BigInt(name) >= nextGroup) nextGroup = BigInt(name) + 1n;
+  }
+  const moved = [];
+
+  async function move(from, name) {
+    let target;
+    if (!name || groupNumber.test(name)) {
+      do target = join(destination, String(nextGroup++));
+      while (await fileAt(target));
+    } else {
+      target = join(destination, name);
+      for (let index = 2; await fileAt(target); index++) {
+        target = join(destination, `${name}（${index}）`);
+      }
+    }
+    await rename(from, target);
+    moved.push({ from, target });
+  }
+
+  try {
+    for (const group of groups) await move(join(original, group.name), group.name);
+    const remaining = await readdir(original, { withFileTypes: true });
+    if (remaining.some(entry => !entry.isFile() || !folderMetadata.test(entry.name))) {
+      await move(original);
+      return;
+    }
+    for (const entry of remaining) await unlink(join(original, entry.name));
+    await rmdir(original);
+  } catch (error) {
+    const rollbackErrors = [];
+    for (const { from, target } of moved.reverse()) {
+      try {
+        if (await fileAt(from)) throw new Error(`原目录已被占用：${from}`);
+        await rename(target, from);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    if (rollbackErrors.length) {
+      throw new Error('部分组已移入「已上」，请检查已上和待办目录后继续归档。', { cause: error });
+    }
+    throw error;
+  }
 }
 
 async function archiveIfComplete(config, state, archives, keyword, onProgress) {
@@ -109,8 +170,11 @@ async function archiveIfComplete(config, state, archives, keyword, onProgress) {
   const folder = join(config.source, COMPLETED_DIRECTORY);
   await mkdir(folder, { recursive: true });
   if (!(await lstat(folder)).isDirectory()) throw new Error(`归档位置不是实体目录：${folder}`);
-  await assertArchiveDestination(entry.destination);
-  await rename(entry.original, entry.destination);
+  if (await archiveDirectory(entry.destination)) {
+    await mergeArchive(entry.original, entry.destination);
+  } else {
+    await rename(entry.original, entry.destination);
+  }
   archives.delete(keyword);
   onProgress(`已移入「已上」 ${keyword}`);
   return keyword;
@@ -141,7 +205,7 @@ export async function runResolved({ material, config, runtime, resolved, archive
     }
   };
   onBatch?.('检查已发布记录和归档条件');
-  await archive();
+  if (publish) await archive();
   for (const [key, { group, itemId }] of unique) {
     const stage = (message, kind) => onBatch?.(`${group.key} · ${message}`, kind);
     const remainingDelay = lastSubmit + config.jobDelayMs - Date.now();

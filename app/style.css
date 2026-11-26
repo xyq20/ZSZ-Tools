@@ -101,6 +101,8 @@ dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radiu
 #taobao-soutu-batch-count,#taobao-soutu-batch-elapsed{white-space:nowrap;font-variant-numeric:tabular-nums}
 #taobao-soutu-batch-elapsed{color:#637286;font-size:12px}
 #taobao-soutu-selection input[type="text"]{width:138px;padding:6px 8px;border:1px solid #dfe5ed;border-radius:5px}
+#taobao-soutu-selection summary{cursor:pointer}
+.soutu-group-id{display:grid;gap:4px;margin-top:8px}
 #taobao-soutu-log{max-height:230px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 
 #return-rate-form{max-width:700px}

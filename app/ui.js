@@ -146,6 +146,7 @@ let hasSycmBook=false,hasSycmResult=false;
 let hasTaobaoFolder=false,taobaoReady=false;
 let independentReminder=false;
 let soutuDirectory=false,soutuReady=false;
+let soutuStyles=[];
 let returnRateConfigured=false,hasReturnRateResult=false;
 let erpRules=null,erpRulesReady=false,erpSchedule=null,erpStopping=false;
 let busy=false,currentTask=null,localTool=null,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false,hasStockBook=false;
@@ -617,19 +618,46 @@ function renderSoutuBatch({ operation, count, total, stage, rows }, message) {
 }
 
 function updateSoutuRows(results) {
-  const byKey = new Map(results.map(row => [row.key, row]));
-  for (const row of soutuField('rows').rows) {
-    const info = byKey.get(row.dataset.key);
-    if (info) row.lastElementChild.textContent = [info.status, info.itemId, info.title, info.matchReason, info.error].filter(Boolean).join(' · ');
+  const byKey = new Map(results.map(result => [result.key, result]));
+  for (const { groups, status } of soutuStyles) {
+    if (!groups.some(group => byKey.has(group.key))) continue;
+    for (const group of groups) {
+      if (byKey.has(group.key)) group.result = byKey.get(group.key);
+    }
+    if (groups.length === 1) {
+      status.textContent = soutuGroupStatus(groups[0]);
+      continue;
+    }
+    const checked = groups.filter(group => group.result?.itemId).length;
+    const summary = document.createElement('summary');
+    summary.textContent = groups.some(group => group.result?.status === '核对中')
+      ? `核对中 · ${checked} / ${groups.length} 组`
+      : `已核对 ${checked} / ${groups.length} 组`;
+    const details = document.createElement('details');
+    details.open = Boolean(status.firstElementChild?.open);
+    details.append(summary);
+    for (const group of groups) {
+      const line = document.createElement('div');
+      line.textContent = `${group.label} · ${soutuGroupStatus(group)}`;
+      details.append(line);
+    }
+    status.replaceChildren(details);
   }
+}
+
+function soutuGroupStatus({ key, label, issue, result }) {
+  if (!result) return issue || '待核对';
+  return [result.status, result.itemId, result.title, result.matchReason, result.error?.replaceAll(key, label)]
+    .filter(Boolean).join(' · ');
 }
 
 function refreshSoutuActions() {
   const locked = busy || Boolean(currentTask);
-  const choices = [...soutuField('rows').querySelectorAll('input[type="checkbox"]')];
-  const valid = choices.filter(input => input.closest('tr').dataset.valid === 'true');
-  const count = valid.filter(input => input.checked).length;
-  choices.forEach(input => { input.disabled = locked || input.closest('tr').dataset.valid !== 'true'; });
+  const valid = soutuStyles.filter(({ groups }) => groups.some(group => !group.issue));
+  const count = valid.filter(({ selected }) => selected.checked).length;
+  for (const { groups, selected } of soutuStyles) {
+    selected.disabled = locked || groups.every(group => group.issue);
+  }
   const all = soutuField('all');
   all.disabled = locked || !valid.length;
   all.checked = Boolean(valid.length && count === valid.length);
@@ -646,29 +674,54 @@ function renderSoutuFolder(result) {
   soutuReady = false;
   const rows = soutuField('rows');
   rows.replaceChildren();
-  const styles = new Set();
-  for (const { key, count, issue, color } of result.rows) {
-    styles.add(key.split('/')[0]);
+  const styles = Map.groupBy(result.rows, ({ key }) => key.split('/')[0]);
+  soutuStyles = [];
+  for (const [name, incoming] of styles) {
     const row = document.createElement('tr');
-    row.dataset.key = key;
-    row.dataset.valid = String(!issue);
     const selected = document.createElement('input');
     selected.type = 'checkbox';
     selected.dataset.job = '';
-    selected.setAttribute('aria-label', '选择 ' + key);
-    const item = document.createElement('input');
-    item.type = 'text';
-    item.inputMode = 'numeric';
-    item.maxLength = 20;
-    item.placeholder = '自动匹配';
-    item.dataset.job = '';
-    item.setAttribute('aria-label', key + ' 的商品 ID');
-    for (const value of [selected, color ? `${key} · ${color}` : key, count, item, issue || '待核对']) {
+    selected.setAttribute('aria-label', '选择 ' + name);
+    const groups = incoming.map((group, index) => {
+      const label = `第 ${index + 1} 组${group.color ? `（${group.color}）` : ''}`;
+      const item = document.createElement('input');
+      item.type = 'text';
+      item.inputMode = 'numeric';
+      item.maxLength = 20;
+      item.placeholder = '自动匹配';
+      item.dataset.job = '';
+      item.setAttribute('aria-label', `${name}${incoming.length > 1 ? ' ' + label : ''} 的商品 ID`);
+      return { ...group, label, item };
+    });
+    const ids = document.createElement('div');
+    const valid = groups.filter(group => !group.issue);
+    if (groups.length === 1 && valid.length) {
+      ids.append(valid[0].item);
+    } else if (valid.length) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = '按组指定';
+      details.append(summary);
+      for (const group of valid) {
+        const label = document.createElement('label');
+        label.className = 'soutu-group-id';
+        label.append(group.label, group.item);
+        details.append(label);
+      }
+      ids.append(details);
+    }
+    const status = document.createElement('div');
+    const invalid = groups.length - valid.length;
+    status.textContent = groups.length === 1 ? soutuGroupStatus(groups[0])
+      : invalid ? `${invalid} 组图片数量不符（每组须有 3–9 张）` : '待核对';
+    const count = groups.reduce((total, group) => total + group.count, 0);
+    for (const value of [selected, name, groups.length, count, ids, status]) {
       const cell = document.createElement('td');
       if (value instanceof HTMLElement) cell.append(value);
       else cell.textContent = value;
       row.append(cell);
     }
+    soutuStyles.push({ groups, selected, status });
     rows.append(row);
   }
   soutuField('selection').hidden = !result.rows.length;
@@ -683,8 +736,9 @@ function renderSoutuHistory(records) {
 }
 
 soutuField('all').addEventListener('change', event => {
-  const rows = soutuField('rows').querySelectorAll('tr[data-valid="true"] input[type="checkbox"]');
-  rows.forEach(input => { input.checked = event.target.checked; });
+  for (const { selected, groups } of soutuStyles) {
+    selected.checked = event.target.checked && groups.some(group => !group.issue);
+  }
   soutuReady = false;
   refreshActions();
 });
@@ -701,16 +755,14 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
       if (result) {
         renderSoutuFolder(result);
         soutuField('batch').hidden = true;
-        status.textContent = result.rows.length ? '请选择本批分组，再核对商品。' : '当前目录没有待办素材。';
+        status.textContent = result.rows.length ? '请选择本批款式，再核对商品。' : '当前目录没有待办素材。';
       }
       return;
     }
     if (action === 'plan') {
       soutuReady = false;
-      const rows = [...soutuField('rows').rows];
-      const selected = rows.filter(row => row.querySelector('input[type="checkbox"]').checked).map(row => ({
-        key: row.dataset.key, itemId: row.querySelector('input[type="text"]').value.trim(),
-      }));
+      const selected = soutuStyles.filter(style => style.selected.checked).flatMap(({ groups }) =>
+        groups.filter(group => !group.issue).map(({ key, item }) => ({ key, itemId: item.value.trim() })));
       status.textContent = '正在核对所选商品…';
       let result;
       try {
