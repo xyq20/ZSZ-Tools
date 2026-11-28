@@ -1,7 +1,61 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
-const {scanFolder,productQuery,productNameFromFile}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'catalog');
+const {scanFolder,productQuery,productNameFromFile,matchProducts}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'catalog');
 const {generateChoices,validTopic}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'model');
 const {assertRunnable,readState,writeState}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'state');
+const {searchProductResults}=require((require('node:fs').existsSync(require('node:path').join(__dirname,'../scripts/validate-choices.js'))?'../scripts/':'../modules/taobao/scripts/')+'platform');
+const {EventEmitter}=require('node:events');
+
+function productSearchFixture(){
+ const page=new EventEmitter(),frame={page:()=>page};
+ page.waitForResponse=predicate=>new Promise(resolve=>{
+  const receive=response=>{if(predicate(response)){page.off('response',receive);resolve(response);}};
+  page.on('response',receive);
+ });
+ const request=(keyword,owner=frame)=>({
+  method:()=>'POST',url:()=>'https://example.test/mtop.taobao.media.guang.item.listitems/',
+  frame:()=>owner,postDataJSON:()=>({data:JSON.stringify({keyword,cursor:''})}),
+ });
+ function respond(req,items,code='SUCCESS::OK'){
+  page.emit('response',{request:()=>req,ok:()=>true,json:async()=>({ret:[code],data:{data:items}})});
+ }
+ return {page,frame,request,respond};
+}
+test('product lookup ignores recommendation responses, older searches, and another frame', {timeout:2000},async()=>{
+ const {page,frame,request,respond}=productSearchFixture();
+ const stale=request('大卡车'),recommendations=request(''),otherFrame=request('大卡车',{});
+ page.emit('request',stale);
+ const result=await searchProductResults(frame,'大卡车',async()=>{
+  page.emit('request',recommendations);
+  page.emit('request',otherFrame);
+  const current=request('大卡车');
+  page.emit('request',current);
+  for(const req of [stale,recommendations,otherFrame])respond(req,[{itemId:'111',title:'【加勒比】工装牛仔裤'}]);
+  respond(current,[{itemId:'222',title:'【大卡车】工装'}]);
+ });
+ assert.deepEqual(result,[{id:'222',title:'【大卡车】工装'}]);
+ assert.equal(page.listenerCount('request'),0);
+});
+test('product lookup distinguishes a confirmed empty result from a platform error', {timeout:2000},async()=>{
+ const {page,frame,request,respond}=productSearchFixture();
+ const search=code=>searchProductResults(frame,'战术裤 升级版',async()=>{
+  const req=request('战术裤 升级版');
+  page.emit('request',req);
+  respond(req,[],code);
+ });
+ assert.deepEqual(await search('SUCCESS::OK'),[]);
+ await assert.rejects(search('FAIL_SYS_SESSION_EXPIRED'),/未确认本次千牛商品搜索结果/);
+});
+test('an upgraded product matches separator variations but excludes the original and other versions',()=>{
+ const products=[
+  {id:'1',title:'【战术裤•升级版】休闲工装裤'},
+  {id:'2',title:'【战术裤·升级版】多口袋工装裤'},
+  {id:'3',title:'【战术裤】原版'},
+  {id:'4',title:'【战术裤•加厚版】工装裤'},
+ ];
+ assert.deepEqual(matchProducts(products,productQuery('战术裤 升级版 1.mp4')).map(x=>x.id),['1','2']);
+ assert.deepEqual(matchProducts([{id:'5',title:'【劳动节40】皮带'}],'劳动节4.0皮带'),[]);
+});
+
 test('folder scan is read only, handles unnumbered names and excludes marked files',async()=>{
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'tb-scan-'));
  try{

@@ -17,7 +17,8 @@ function productSearchQueries(file){
  return [...new Set([query,withoutCategory].filter(Boolean))];
 }
 function matchProducts(candidates,query){
- const normalize=value=>String(value||'').normalize('NFKC').replace(/\s+/gu,'');
+ // A middle dot in a shop alias can be a space in the video filename.
+ const normalize=value=>String(value||'').normalize('NFKC').replace(/[\s·•‧・]+/gu,'');
  const expected=normalize(query);
  if(!expected)return [];
  const unique=new Map();

@@ -11,9 +11,11 @@ async function fillBatch(page, choices) {
  const results=[],successChoices=[],failures=[];
  for(const item of choices){
   try{
-   await searchProduct(f,item);
+   const candidates=await searchProduct(f,item);
    const dialog=productDialog(f);
    const products=item.products||[{id:item.product_id,title:item.product_name}];
+   const candidateIds=new Set(candidates.map(product=>product.id));
+   if(products.some(product=>!candidateIds.has(String(product.id))))throw Error('本次商品搜索结果已变化，请重新匹配');
    for(const product of products){
     const link=dialog.locator('a[href*="item.taobao.com"]').and(dialog.locator(
      'a[href$="?id='+product.id+'"], a[href*="?id='+product.id+'&"], a[href$="&id='+product.id+'"], a[href*="&id='+product.id+'&"]'

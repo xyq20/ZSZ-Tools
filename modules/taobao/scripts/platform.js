@@ -69,6 +69,39 @@ async function removeVideoFromBatch(f,file){
   return true;
  }catch{return false;}
 }
+function isProductSearchRequest(request,f,query){
+ if(request.method()!=='POST'||!/mtop\.taobao\.media\.guang\.item\.listitems/i.test(request.url()))return false;
+ try{
+  if(request.frame()!==f)return false;
+  const payload=request.postDataJSON();
+  const data=typeof payload?.data==='string'?JSON.parse(payload.data):payload?.data||payload;
+  return data?.keyword===query&&!data.cursor;
+ }catch{return false;}
+}
+async function searchProductResults(f,query,submit){
+ const page=f.page(),requests=new WeakSet();
+ const capture=request=>{if(isProductSearchRequest(request,f,query))requests.add(request);};
+ // Opening the dialog also loads recommendations through this endpoint.
+ page.on('request',capture);
+ try{
+  const [response]=await Promise.all([
+   page.waitForResponse(r=>requests.has(r.request()),{timeout:15000}),
+   submit(),
+  ]);
+  if(!response.ok())throw Error('商品搜索请求失败');
+  const body=await response.json();
+  const items=body?.data?.data;
+  if(!body?.ret?.some(code=>/^SUCCESS(?:::|$)/.test(code))||!Array.isArray(items))throw Error('千牛返回商品搜索异常');
+  if(!items.length&&(body.data.hasNext===true||body.data.hasNext==='true'))throw Error('千牛商品搜索结果尚未返回，请重试');
+  return items.map(item=>{
+   const id=String(item?.itemId||'');
+   const title=typeof item?.title==='string'?item.title.trim():'';
+   if(!/^\d+$/.test(id)||!title)throw Error('千牛商品搜索结果缺少商品信息');
+   return {id,title};
+  });
+ }catch(cause){throw Error('未确认本次千牛商品搜索结果，请重试',{cause});}
+ finally{page.off('request',capture);}
+}
 async function searchProduct(f,item){
  await closeHint(f);
  await selectVideo(f,item.file);
@@ -83,16 +116,8 @@ async function searchProduct(f,item){
  }catch(cause){throw Error('未能打开淘宝的关联商品窗口',{cause});}
  const query=item.query||productQuery(item.file);
  await search.fill(query);
- try{
-  const [response]=await Promise.all([
-   f.page().waitForResponse(r=>/mtop\.taobao\.media\.guang\.item\.listitems/i.test(r.url())&&r.request().method()==='POST',{timeout:15000}),
-   dialog.getByRole('button',{name:'搜索',exact:true}).click({timeout:CONTROL_TIMEOUT}),
-  ]);
-  if(!response.ok()||await response.finished())throw Error('商品搜索请求失败');
- }catch(cause){throw Error('淘宝商品搜索未返回有效响应，请重试',{cause});}
- return query;
+ return searchProductResults(f,query,()=>dialog.getByRole('button',{name:'搜索',exact:true}).click({timeout:CONTROL_TIMEOUT}));
 }
-async function productCandidates(f){return productDialog(f).locator('a[href*="item.taobao.com"]').evaluateAll(es=>es.map(e=>({id:new URL(e.href).searchParams.get('id'),title:e.textContent.trim()})));}
 async function collectProducts(page,items,progress=()=>{}){
  const f=frame(page);await closeHint(f);const out=[],failures=[];
  for(const [index,item] of items.entries()){
@@ -103,10 +128,9 @@ async function collectProducts(page,items,progress=()=>{}){
    let selected,query;
    const attempts=[];
    for(query of queries){
-    await searchProduct(f,{...item,query});
-    const candidates=await productCandidates(f);
+    const candidates=await searchProduct(f,{...item,query});
     const matches=matchProducts(candidates,expected);
-    attempts.push(`搜索“${query}”，候选 ${candidates.map(c=>c.title).slice(0,5).join(' / ')||'无'}`);
+    attempts.push(`“${query}”返回 ${candidates.length} 个候选`);
     await cancelEditorDialog(productDialog(f));
     if(matches.length>6)throw Error('同名商品超过淘宝单视频 6 个上限；'+attempts.join('；'));
     if(matches.length){selected=matches;break;}
@@ -175,4 +199,4 @@ async function upload(page,rows,progress=()=>{}){
  }
  return withFailures(success,failures);
 }
-module.exports={URL,frame,errorMessage,closeHint,selectVideo,productDialog,searchProduct,productCandidates,collectProducts,fetchTopics,upload,inspectMedia,removeVideoFromBatch,cancelEditorDialog,disableAiOptimization,assertAiOptimizationOff};
+module.exports={URL,frame,errorMessage,closeHint,selectVideo,productDialog,searchProduct,searchProductResults,collectProducts,fetchTopics,upload,inspectMedia,removeVideoFromBatch,cancelEditorDialog,disableAiOptimization,assertAiOptimizationOff};
