@@ -1,7 +1,6 @@
 const { validateChoices } = require('./validate-choices');
 const { productNameFromFile } = require('./catalog');
-const { removeVideoFromBatch } = require('./platform');
-function errorMessage(error){return error instanceof Error?error.message:String(error||'未知错误');}
+const { removeVideoFromBatch,selectVideo,assertAiOptimizationOff,errorMessage } = require('./platform');
 /** Verify the entire visible batch. Publishing is opt-in and never retried here. */
 async function finalizeBatch(page, choices, { publish = false } = {}) {
  validateChoices(choices);
@@ -9,15 +8,10 @@ async function finalizeBatch(page, choices, { publish = false } = {}) {
     throw new Error('批次为空或包含重复视频');
   const f = page.frames().find(x => x.url().includes('qianniu-batch-video'));
   if (!f) throw new Error('未找到批量编辑页面');
-  const text = await f.locator('#root').innerText();
-  const count = Number(text.match(/批量发布\s*[（(](\d+)\/100/)?.[1]);
-  if (count < choices.length) throw new Error('页面视频数量少于待发布清单');
-  if (await f.getByText('已上传', { exact: true }).count() !== count)
-    throw new Error('仍有视频未完成上传');
   const verified = [],failed=[];
   for (const item of choices) {
     try {
-      await f.getByText(item.file, { exact: true }).click();
+      await selectVideo(f,item.file);
       const title = f.getByPlaceholder('加个标题让内容更吸引人');
       // Wait for the selected video's saved fields, rather than reading stale state.
       await f.waitForFunction(expected =>
@@ -40,6 +34,7 @@ async function finalizeBatch(page, choices, { publish = false } = {}) {
       const expectedIds=products.map(product=>String(product.id)).sort();
       if(JSON.stringify([...savedProductIds].sort())!==JSON.stringify(expectedIds))problems.push('关联商品 ID 不一致，预期 '+expectedIds.join('、')+'，实际 '+savedProductIds.join('、'));
       if(problems.length)throw Error('视频填写核验失败：'+item.file+'；'+problems.join('；'));
+      await assertAiOptimizationOff(f);
       verified.push(item.file);
     } catch (error) {
       const removed=await removeVideoFromBatch(f,item.file);
@@ -49,12 +44,13 @@ async function finalizeBatch(page, choices, { publish = false } = {}) {
   const verifiedChoices=choices.filter(item=>verified.includes(item.file));
   const remainingText=await f.locator('#root').innerText();
   const remainingCount=Number(remainingText.match(/批量发布\s*[（(](\d+)\/100/)?.[1]);
-  if(failed.some(item=>!item.removed)||remainingCount!==verifiedChoices.length)
+  if(failed.some(item=>!item.removed)||remainingCount!==verifiedChoices.length||
+     await f.locator('.batchItemWrap').getByText('已上传',{exact:true}).count()!==remainingCount)
     return {status:'blocked',clicked:false,verified,choices:verifiedChoices,failed};
   if(!verifiedChoices.length)return {status:'no_success',clicked:false,verified,choices:[],failed};
   const button = f.getByRole('button', { name: '批量发布', exact: true });
   if (await button.count() !== 1 || !await button.isEnabled())
-    throw new Error('批量发布按钮不可用');
+    return {status:'blocked',clicked:false,verified,choices:verifiedChoices,failed};
   if (!publish) return { status: 'ready_for_publish', clicked: false, verified, choices:verifiedChoices, failed };
   await button.click();
   // A click is not proof of publication. The caller must inspect the platform result.

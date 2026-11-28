@@ -147,6 +147,7 @@ let hasTaobaoFolder=false,taobaoReady=false;
 let independentReminder=false;
 let soutuDirectory=false,soutuReady=false;
 let soutuStyles=[];
+let soutuPublishBlock='';
 let returnRateConfigured=false,hasReturnRateResult=false;
 let erpRules=null,erpRulesReady=false,erpSchedule=null,erpStopping=false;
 let busy=false,currentTask=null,localTool=null,hasBook=false,hasPrices=false,hasFillablePrices=false,hasReport=false,hasMonthlyBook=false,hasMonthlyPreview=false,hasMonthlyReport=false,canSaveMonthly=false,hasStockBook=false;
@@ -496,7 +497,9 @@ for(const action of ['settings','save-key','login','choose','prepare','publish',
   const failedRows=(r.summary?.failures||[]).map(x=>['跳过',x.file,x.error||'',x.stage||'', '', '']);
   table('taobao-results',['状态','视频','文案 / 原因','关联商品 / 阶段','商品 ID','话题'],[...successRows,...failedRows]);
   const summary=r.summary||{success:(r.choices||[]).length,failed:failedRows.length};
-  statusFor('taobao').textContent=`处理完成：成功 ${summary.success}，跳过 ${summary.failed} 条。${r.status==='ready'?'请核对成功项后确认发布。':'没有可发布的视频。'}`;taobaoReady=r.status==='ready';return;
+  const next=r.status==='ready'?'请核对成功项后确认发布。'
+   :r.status==='blocked'?'千牛页面的批次状态未通过核验，请核对页面后重试。':'没有可发布的视频。';
+  statusFor('taobao').textContent=`处理完成：成功 ${summary.success}，跳过 ${summary.failed} 条。${next}`;taobaoReady=r.status==='ready';return;
  }
  if(action==='publish'){
   try{const r=await call('taobao-publish');if(r){taobaoReady=false;statusFor('taobao').textContent=r.message;}}catch(e){taobaoReady=false;throw e;}return;
@@ -664,7 +667,12 @@ function refreshSoutuActions() {
   all.indeterminate = count > 0 && count < valid.length;
   soutuField('scan').disabled = locked || !soutuDirectory;
   soutuField('plan').disabled = locked || !count;
-  soutuField('publish').disabled = locked || !soutuReady;
+  const publish = soutuField('publish');
+  publish.disabled = locked || !soutuReady;
+  const hint = soutuField('publish-hint');
+  hint.hidden = !soutuDirectory || !publish.disabled;
+  hint.textContent = locked ? '任务执行中，完成后可继续。' :
+    soutuPublishBlock || (count ? '请先核对所选商品。' : '勾选待办款式并核对通过后即可发布。');
   soutuField('archive').disabled = locked || !soutuDirectory;
 }
 
@@ -672,6 +680,7 @@ function renderSoutuFolder(result) {
   if (!result) return;
   soutuDirectory = true;
   soutuReady = false;
+  soutuPublishBlock = '';
   const rows = soutuField('rows');
   rows.replaceChildren();
   const styles = Map.groupBy(result.rows, ({ key }) => key.split('/')[0]);
@@ -735,17 +744,19 @@ function renderSoutuHistory(records) {
   ]));
 }
 
+function invalidateSoutuReview() {
+  if (soutuReady) soutuPublishBlock = '勾选或商品 ID 已更改，请重新核对所选商品。';
+  soutuReady = false;
+  refreshActions();
+}
+
 soutuField('all').addEventListener('change', event => {
   for (const { selected, groups } of soutuStyles) {
     selected.checked = event.target.checked && groups.some(group => !group.issue);
   }
-  soutuReady = false;
-  refreshActions();
+  invalidateSoutuReview();
 });
-soutuField('rows').addEventListener('input', () => {
-  soutuReady = false;
-  refreshActions();
-});
+soutuField('rows').addEventListener('input', invalidateSoutuReview);
 
 for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', 'resolve', 'archive']) {
   soutuField(action).addEventListener('click', () => run('taobao-soutu', async () => {
@@ -761,6 +772,7 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
     }
     if (action === 'plan') {
       soutuReady = false;
+      soutuPublishBlock = '';
       const selected = soutuStyles.filter(style => style.selected.checked).flatMap(({ groups }) =>
         groups.filter(group => !group.issue).map(({ key, item }) => ({ key, itemId: item.value.trim() })));
       status.textContent = '正在核对所选商品…';
@@ -768,11 +780,16 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
       try {
         result = await call('taobao-soutu-plan', selected);
       } catch (error) {
+        soutuPublishBlock = error.message;
         if (soutuField('batch-detail').textContent === error.message) return;
         throw error;
       }
       updateSoutuRows(result.rows);
       soutuReady = result.ready;
+      if (!soutuReady) {
+        soutuPublishBlock = result.pending ? '有发布结果待确认，请先点「核对待确认记录」。'
+          : '本批暂无核对通过的组，请查看各组原因后重试或填写已核实的商品 ID。';
+      }
       return;
     }
     if (action === 'publish') {
@@ -786,6 +803,7 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
         }
       } catch (error) {
         soutuReady = false;
+        soutuPublishBlock = error.message;
         try { renderSoutuHistory(await call('taobao-soutu-history')); } catch {}
         if (soutuField('batch-detail').textContent === error.message) return;
         throw error;
@@ -796,7 +814,8 @@ for (const action of ['login', 'choose', 'scan', 'plan', 'publish', 'history', '
     if (action === 'history') renderSoutuHistory(result);
     else status.textContent = result.message;
     if (action === 'resolve') {
-      soutuReady = false;
+      invalidateSoutuReview();
+      soutuPublishBlock = result.message;
       renderSoutuHistory(await call('taobao-soutu-history'));
     }
   }));

@@ -217,8 +217,9 @@ function createTaobaoSoutuTool({ app, win, dialog, shell, safeStorage, progress,
     const pending = Object.values(state).find(entry => entry.status === 'pending');
     if (resolved.length && !pending) ready = { source, resolved, skipped: missing.length };
     report(pending
-      ? `「${pending.group}」有待确认的发布记录，请先核对`
-      : missing.length ? `${missing.length} 组待核对，请检查商品 ID` : '请检查匹配结果，再确认发布',
+      ? `「${pending.group}」有待确认的发布记录，请点「核对待确认记录」`
+      : missing.length ? (resolved.length ? `可发布 ${resolved.length} 组，另有 ${missing.length} 组待核对`
+        : '本批暂无核对通过的组，请查看各组原因') : '请检查匹配结果，再确认发布',
     pending ? 'pending' : missing.length ? 'partial' : 'done', resolved.length);
     return { rows, ready: Boolean(ready), pending: pending?.group || '', matched: resolved.length };
   }

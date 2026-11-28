@@ -83,7 +83,7 @@ dialog{width:min(480px,calc(100vw - 48px));border:1px solid #e5e8ed;border-radiu
 
 #taobao-reminders-result { white-space: pre-wrap; overflow-wrap: anywhere; }
 
-#taobao-soutu-folder,#taobao-soutu-progress{overflow-wrap:anywhere;color:#576579}
+#taobao-soutu-folder,#taobao-soutu-progress,#taobao-soutu-publish-hint{overflow-wrap:anywhere;color:#576579}
 #taobao-soutu-progress:empty{display:none}
 #taobao-soutu-batch{
   display:grid;gap:10px;margin:14px 0;padding:14px 16px;

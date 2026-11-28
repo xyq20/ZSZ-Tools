@@ -1,8 +1,40 @@
 const {productQuery,productSearchQueries,matchProducts}=require('./catalog');
 const URL='https://qn.taobao.com/home.htm/guanghe-creator/creation-tool/batch-publish';
-function errorMessage(error){return error instanceof Error?error.message:String(error||'未知错误');}
+const CONTROL_TIMEOUT=5000;
+function errorMessage(error){
+ const message=error instanceof Error?error.message:String(error||'未知错误');
+ if(error?.name==='TimeoutError')return '淘宝页面操作超时，请重试';
+ return message.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n|Call log:/)[0].trim().slice(0,180)||'未知错误';
+}
 function withFailures(rows,failures){Object.defineProperty(rows,'failures',{value:failures,enumerable:false});return rows;}
 function frame(page){const f=page.frames().find(f=>f.url().includes('/qianniu-batch-video'));if(!f)throw Error('未找到淘宝批量编辑页，请先登录并打开批量发布');return f;}
+function videoRow(f,file){
+ return f.locator('.batchItemWrap').filter({has:f.locator('.batchItemTitle').and(f.getByText(file,{exact:true}))});
+}
+async function selectVideo(f,file){
+ const row=videoRow(f,file);
+ await row.locator('.batchItemTitle').click({timeout:CONTROL_TIMEOUT});
+ await row.and(f.locator('.batchItemWrap-active')).waitFor({state:'visible',timeout:CONTROL_TIMEOUT});
+}
+function aiOptimizationSwitch(f){
+ return f.locator('[class*="publish-content__publish-button--hosting-section--"]')
+  .filter({has:f.getByText('AI优化',{exact:true})}).getByRole('switch');
+}
+async function assertAiOptimizationOff(f){
+ try{
+  await aiOptimizationSwitch(f).and(f.locator('[aria-checked="false"]')).waitFor({state:'visible',timeout:CONTROL_TIMEOUT});
+ }catch(cause){throw Error('未确认该视频的 AI优化已关闭',{cause});}
+}
+async function disableAiOptimization(f){
+ const control=aiOptimizationSwitch(f);
+ try{
+  await control.waitFor({state:'visible',timeout:CONTROL_TIMEOUT});
+  const checked=await control.getAttribute('aria-checked',{timeout:CONTROL_TIMEOUT});
+  // The platform switch supports Space, even when the sticky footer covers it.
+  if(checked==='true')await control.press('Space',{timeout:CONTROL_TIMEOUT});
+ }catch(cause){throw Error('无法关闭该视频的 AI优化',{cause});}
+ await assertAiOptimizationOff(f);
+}
 async function closeHint(f){
  const buttons=f.getByRole('button',{name:'关闭',exact:true});
  for(let index=await buttons.count()-1;index>=0;index--){
@@ -10,49 +42,57 @@ async function closeHint(f){
   if(await button.isVisible())await button.dispatchEvent('click');
  }
 }
-async function cancelProductDialog(f){
- const cancel=f.getByRole('dialog').getByRole('button',{name:'取消',exact:true});
- await cancel.dispatchEvent('click');
- await cancel.waitFor({state:'hidden',timeout:5000});
+function productDialog(f){
+ return f.getByRole('dialog').filter({has:f.getByRole('searchbox',{name:'搜索'})});
+}
+async function cancelEditorDialog(dialog){
+ if(await dialog.count()!==1)return;
+ const cancel=dialog.getByRole('button',{name:'取消',exact:true});
+ if(await cancel.count()!==1)return;
+ await cancel.dispatchEvent('click',{}, {timeout:CONTROL_TIMEOUT});
+ await dialog.waitFor({state:'hidden',timeout:CONTROL_TIMEOUT});
 }
 async function removeVideoFromBatch(f,file){
  try{
-  const clicked=await f.evaluate(filename=>{
-   const exact=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent.trim()===filename);
-   if(!exact)return false;
-   let node=exact;
-   for(let depth=0;node&&depth<8;depth++,node=node.parentElement){
-    const controls=[...node.querySelectorAll('button,[role="button"]')];
-    const labelled=controls.find(c=>/(删除|移除|delete|remove|trash)/i.test([c.getAttribute('aria-label'),c.getAttribute('title'),c.className].filter(Boolean).join(' ')));
-    if(labelled){labelled.click();return true;}
-   }
-   return false;
-  },file);
-  if(!clicked)return false;
-  const dialog=f.getByRole('dialog');
-  if(await dialog.count()){
-   const confirm=dialog.filter({hasText:/删除.*视频|移除.*视频/}).getByRole('button',{name:/^(确定|确认|删除|移除)$/}).last();
-   if(await confirm.count()&&await confirm.isVisible())await confirm.click();
-  }
-  await f.getByText(file,{exact:true}).waitFor({state:'detached',timeout:5000}).catch(()=>{});
-  return await f.getByText(file,{exact:true}).count()===0;
+  const row=videoRow(f,file);
+  const count=await row.count();
+  if(count===0)return true;
+  if(count!==1)return false;
+  const icon=row.locator('.batchItemTop svg').filter({has:f.locator('use[*|href="#icondelete"]')});
+  if(!await icon.isVisible())return false;
+  await icon.dispatchEvent('click',{}, {timeout:CONTROL_TIMEOUT});
+  const confirm=f.getByRole('dialog').filter({has:f.getByText('是否确认删除视频'+file,{exact:true})})
+   .getByRole('button',{name:'确认',exact:true});
+  await confirm.waitFor({state:'visible',timeout:CONTROL_TIMEOUT});
+  await confirm.dispatchEvent('click',{}, {timeout:CONTROL_TIMEOUT});
+  await row.waitFor({state:'detached',timeout:CONTROL_TIMEOUT});
+  return true;
  }catch{return false;}
 }
 async function searchProduct(f,item){
  await closeHint(f);
- await f.getByText(item.file,{exact:true}).click();
- await f.getByPlaceholder('加个标题让内容更吸引人').waitFor();
- await f.getByText('添加商品',{exact:true}).last().click();
- await f.locator('a[href*="item.taobao.com"]').first().waitFor();
+ await selectVideo(f,item.file);
+ const trigger=f.locator('[class*="publish-content__item-v2--items-trigger--"]:not([class*="--list-item-disabled--"])');
+ const dialog=productDialog(f);
+ const search=dialog.getByRole('searchbox',{name:'搜索'});
+ try{
+  await trigger.waitFor({state:'visible',timeout:CONTROL_TIMEOUT});
+  // The outer iframe and sticky batch footer can intercept pointer clicks.
+  await trigger.dispatchEvent('click',{}, {timeout:CONTROL_TIMEOUT});
+  await search.waitFor({state:'visible',timeout:CONTROL_TIMEOUT});
+ }catch(cause){throw Error('未能打开淘宝的关联商品窗口',{cause});}
  const query=item.query||productQuery(item.file);
- const done=f.page().waitForResponse(r=>/mtop\.taobao\.media\.guang\.item\.listitems/i.test(r.url())&&r.request().method()==='POST',{timeout:15000}).catch(()=>null);
- await f.getByRole('searchbox',{name:'搜索'}).fill(query);
- await f.getByRole('button',{name:'搜索',exact:true}).click();
- const response=await done;if(response)await response.finished();
- if(!response)throw Error('商品搜索响应未确认，请重试；未选择商品');
+ await search.fill(query);
+ try{
+  const [response]=await Promise.all([
+   f.page().waitForResponse(r=>/mtop\.taobao\.media\.guang\.item\.listitems/i.test(r.url())&&r.request().method()==='POST',{timeout:15000}),
+   dialog.getByRole('button',{name:'搜索',exact:true}).click({timeout:CONTROL_TIMEOUT}),
+  ]);
+  if(!response.ok()||await response.finished())throw Error('商品搜索请求失败');
+ }catch(cause){throw Error('淘宝商品搜索未返回有效响应，请重试',{cause});}
  return query;
 }
-async function productCandidates(f){return f.locator('a[href*="item.taobao.com"]').evaluateAll(es=>es.map(e=>({id:new URL(e.href).searchParams.get('id'),title:e.textContent.trim()})));}
+async function productCandidates(f){return productDialog(f).locator('a[href*="item.taobao.com"]').evaluateAll(es=>es.map(e=>({id:new URL(e.href).searchParams.get('id'),title:e.textContent.trim()})));}
 async function collectProducts(page,items,progress=()=>{}){
  const f=frame(page);await closeHint(f);const out=[],failures=[];
  for(const [index,item] of items.entries()){
@@ -67,15 +107,14 @@ async function collectProducts(page,items,progress=()=>{}){
     const candidates=await productCandidates(f);
     const matches=matchProducts(candidates,expected);
     attempts.push(`搜索“${query}”，候选 ${candidates.map(c=>c.title).slice(0,5).join(' / ')||'无'}`);
-    await cancelProductDialog(f);
+    await cancelEditorDialog(productDialog(f));
     if(matches.length>6)throw Error('同名商品超过淘宝单视频 6 个上限；'+attempts.join('；'));
     if(matches.length){selected=matches;break;}
    }
    if(!selected)throw Error('商品匹配失败；'+attempts.join('；'));
    out.push({...item,query,product_id:selected[0].id,product_name:selected[0].title,products:selected});
   }catch(error){
-   const dialog=f.getByRole('dialog');
-   if(await dialog.count()){const cancel=dialog.getByRole('button',{name:'取消',exact:true});if(await cancel.count())await cancel.dispatchEvent('click').catch(()=>{});}
+   await cancelEditorDialog(productDialog(f)).catch(()=>{});
    const removed=await removeVideoFromBatch(f,item.file);
    failures.push({file:item.file,stage:'商品匹配',error:errorMessage(error),removed});
   }
@@ -123,14 +162,9 @@ async function upload(page,rows,progress=()=>{}){
  progress('正在上传 '+rows.length+' 条视频…');
  const results=await Promise.all(rows.map(async row=>{
   try{
-   await f.waitForFunction(filename=>{
-    const exact=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent.trim()===filename);
-    let node=exact;
-    for(let depth=0;node&&depth<8;depth++,node=node.parentElement){
-     if([...node.querySelectorAll('*')].some(e=>e.children.length===0&&e.textContent.trim()==='已上传'))return true;
-    }
-    return false;
-   },row.file,{timeout:600000});
+   const status=videoRow(f,row.file).locator('.batchItemStatus').getByText(/^(已上传|上传失败)$/);
+   await status.waitFor({state:'visible',timeout:600000});
+   if(await status.innerText()==='上传失败')throw Error('淘宝显示该视频上传失败');
    return {row};
   }catch(error){return {row,error};}
  }));
@@ -141,4 +175,4 @@ async function upload(page,rows,progress=()=>{}){
  }
  return withFailures(success,failures);
 }
-module.exports={URL,frame,closeHint,searchProduct,productCandidates,collectProducts,fetchTopics,upload,inspectMedia,removeVideoFromBatch};
+module.exports={URL,frame,errorMessage,closeHint,selectVideo,productDialog,searchProduct,productCandidates,collectProducts,fetchTopics,upload,inspectMedia,removeVideoFromBatch,cancelEditorDialog,disableAiOptimization,assertAiOptimizationOff};

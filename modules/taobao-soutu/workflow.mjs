@@ -55,7 +55,16 @@ export async function resolveJobs(material, jobs, {
             const apiKey = (await getModelKey?.())?.trim();
             if (!apiKey) throw new Error(`请先配置 DeepSeek API 密钥。 ${match.error.message}`);
             onStage?.('正在读取千牛候选主图');
-            portraits ??= await material.productPortraits(products);
+            if (!portraits) {
+              portraits = await material.productPortraits(products);
+              const missing = products.filter(({ id }) => !portraits.has(id));
+              if (missing.length) {
+                onStage?.('千牛部分候选主图暂未读到，正在重试', 'retry');
+                await delay(650);
+                onStage?.('正在重读缺失的千牛主图', 'active');
+                for (const [id, image] of await material.productPortraits(missing)) portraits.set(id, image);
+              }
+            }
             modelMatch = await matchWithDeepSeek({ group, products, portraits, apiKey, fetchImpl, onStage });
             await material.checkAccess();
             resolvedId = modelMatch.itemId;

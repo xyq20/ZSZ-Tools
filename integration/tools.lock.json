@@ -68,16 +68,16 @@
     },
     "taobao": {
       "source": "../../../Documents/ChatGPT/淘宝素材上传（谭）",
-      "commit": "5beccac7f0719e83c19264dbd10a2e10c1de36d5",
+      "commit": "544dd85f46c9751fcc72faf66ba4d339dfb81938",
       "dirty": false,
       "files": {
         "scripts/fill-batch.js": {
           "target": "modules/taobao/scripts/fill-batch.js",
-          "sha256": "c18fe10a818ea95454a86522d2691f916904dfc8ed231202e2a43421dc3d07f3"
+          "sha256": "41f64cd8a811df75aa71ba4383d685edd7ab55731ed563912f2d310d1da91b5f"
         },
         "scripts/finalize-batch.js": {
           "target": "modules/taobao/scripts/finalize-batch.js",
-          "sha256": "d17a4b422cf75049a4950d527ce3cbc26e9a6b0c82106218b4643d6513245780"
+          "sha256": "37b57a0c7c7c81f951f467082411f5348fec11f0fa88cc200a575a642daca469"
         },
         "scripts/run-prepared-batch.js": {
           "target": "modules/taobao/scripts/run-prepared-batch.js",
@@ -109,7 +109,7 @@
         },
         "scripts/platform.js": {
           "target": "modules/taobao/scripts/platform.js",
-          "sha256": "9715d75336a27b54e882d0d30c106256aa4f4596cf3981a2f0106c1d80ce0d3b"
+          "sha256": "ee6eb2e92db5dc4ece8b7e8bf7987f05ecb61287a0d3daacfb20a02f485a39bc"
         },
         "scripts/publication-result.js": {
           "target": "modules/taobao/scripts/publication-result.js",
@@ -260,7 +260,7 @@
     },
     "taobao-soutu": {
       "source": "../../../Documents/ChatGPT/搜推素材（小林）",
-      "commit": "e15b24155f76eab41448515debea400fdeb3b2f1",
+      "commit": "61d016911f34b5e630995c08a3374a98d3a7e742",
       "dirty": true,
       "files": {
         "src/browser.mjs": {
@@ -273,7 +273,7 @@
         },
         "src/deepseek-match.mjs": {
           "target": "modules/taobao-soutu/deepseek-match.mjs",
-          "sha256": "2cc435beacc97d91a641ed4d61705d7d50c27a89bc8f1b332d1be3382dd05eb6"
+          "sha256": "4756cf98e6ccf62625442922574d3e56d0c8b3fab2a1606a1829edac5a68c70f"
         },
         "src/state.mjs": {
           "target": "modules/taobao-soutu/state.mjs",
@@ -281,7 +281,7 @@
         },
         "src/workflow.mjs": {
           "target": "modules/taobao-soutu/workflow.mjs",
-          "sha256": "551a23eb56b9db99e5e32ef5012cd96617ee5dc2fd5ddf2cfb3a2430fd490faa"
+          "sha256": "79967bbecb8cf0c6216f82541112c8ca6672b9973707a8b22a2aa44a34fbf6bf"
         },
         "config.example.json": {
           "target": "modules/taobao-soutu/defaults.json",

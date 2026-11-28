@@ -85,6 +85,8 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
   let launches = 0;
   let writes = 0;
   let waitForConfirmation = false;
+  let unmatched;
+  let fixtureState = {};
   const snapshots = [];
   const context = new EventEmitter();
   const page = { isClosed: () => false };
@@ -93,11 +95,15 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
   const core = {
     MaterialPage: class { constructor(page) { this.page = page; } async checkAccess() {} },
     async launchBrowser() { launches++; return context; },
-    async scanMaterials() { return [current]; },
-    async readState() { return {}; },
+    async scanMaterials() { return unmatched ? [current, unmatched] : [current]; },
+    async readState() { return fixtureState; },
     async resolveJobs(_page, jobs, options) {
       assert.equal(options.getModelKey(), 'test-key');
-      return jobs.map(entry => ({ ...entry, itemId, title: '核对样例', matchedBy: 'deepseek', matchReason: '口袋细节吻合' }));
+      return jobs.filter(({ group }) => {
+        if (group !== unmatched) return true;
+        options.onUnmatched({ group, error: Error('候选主图暂未读到') });
+        return false;
+      }).map(entry => ({ ...entry, itemId, title: '核对样例', matchedBy: 'deepseek', matchReason: '口袋细节吻合' }));
     },
     productKey: () => 'state-record',
     async lockRuntime() { locks++; return async () => { locks--; }; },
@@ -155,10 +161,26 @@ test('搜推核对阶段只读，并仅提交再确认且未变动的原分组',
   assert.equal(writes, 1);
   assert.equal(launches, 1);
   assert.equal(locks, 0);
+  fixtureState = {};
   waitForConfirmation = true;
   await tool.plan(selection);
   await assert.rejects(tool.publish(), /提交结果待核对/);
   assert.deepEqual([snapshots.at(-1)?.stage, snapshots.at(-1)?.count], ['pending', 0]);
+
+  unmatched = { key: '案例/2', keyword: '案例', images: [4, 5, 6], fingerprint: 'def' };
+  await tool.scan();
+  const twoGroups = [...selection, { key: unmatched.key }];
+  fixtureState = {};
+  const partial = await tool.plan(twoGroups);
+  assert.equal(partial.ready, true);
+  assert.equal(partial.matched, 1);
+  assert.equal(snapshots.at(-1).stage, 'partial');
+  fixtureState = { previous: { status: 'pending', group: '另一款/1' } };
+  const blocked = await tool.plan(twoGroups);
+  assert.equal(blocked.ready, false);
+  assert.equal(blocked.pending, '另一款/1');
+  assert.equal(blocked.matched, 1);
+  assert.equal(snapshots.at(-1).stage, 'pending');
   await tool.cleanup();
 });
 
